@@ -7,6 +7,7 @@ from datetime import datetime
 from typing import Optional, List, Dict, Any
 import pandas as pd
 from config import settings
+from services.telegram_service import telegram_service
 
 # Setup file logging
 log_dir = "logs"
@@ -219,12 +220,28 @@ class TradingService:
             })
             logger.info(f"ORDER SUCCESS: {signal.upper()} @ {result.get('price'):.5f}, ID={result.get('order_id')}")
             self.stats["last_action"] = f"OPENED {signal.upper()} @ {result.get('price'):.5f}"
+            
+            # Send Telegram notification
+            telegram_service.notify_trade_opened(
+                symbol=symbol,
+                trade_type=signal,
+                price=result.get("price", price),
+                lots=lots,
+                sl=sl,
+                tp=tp,
+                signal_type=signal_type
+            )
+            
             return {"action": "opened", "result": result}
         else:
             error_msg = result.get("error", "Unknown error")
             self.last_error = error_msg  # Store for browser notification
             logger.error(f"ORDER FAILED: {error_msg}")
             self.stats["last_action"] = f"FAILED: {error_msg}"
+            
+            # Send Telegram error notification
+            telegram_service.notify_error(f"Order failed for {symbol}: {error_msg}")
+            
             return {"action": "failed", "error": error_msg}
     
     def monitor_positions(self, mt5_service, data_service) -> None:
@@ -430,6 +447,10 @@ class TradingService:
             daemon=True
         )
         self.thread.start()
+        
+        # Send Telegram notification
+        telegram_service.notify_bot_started(settings.SYMBOL, settings.RISK_PERCENT)
+        
         return {"success": True, "message": "Bot started"}
     
     def stop(self):
@@ -437,6 +458,10 @@ class TradingService:
         self.running = False
         if self.thread:
             self.thread.join(timeout=5)
+        
+        # Send Telegram notification
+        telegram_service.notify_bot_stopped()
+        
         return {"success": True, "message": "Bot stopped"}
     
     def pause(self):

@@ -598,8 +598,20 @@
                 }
 
                 if (status.price && status.price.bid) {
-                    document.getElementById('currentPrice').textContent =
-                        '$' + status.price.bid.toFixed(5);
+                    const price = status.price.bid;
+                    // Format price based on magnitude (Crypto vs Forex)
+                    let formattedPrice;
+                    if (price > 100) {
+                        // Crypto (BTC, Gold, etc.) - show 2 decimals
+                        formattedPrice = '$' + price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                    } else {
+                        // Forex - show 5 decimals
+                        formattedPrice = '$' + price.toFixed(5);
+                    }
+                    document.getElementById('currentPrice').textContent = formattedPrice;
+                } else {
+                    // Show waiting message if no price data
+                    document.getElementById('currentPrice').textContent = 'Waiting...';
                 }
 
                 if (status.account) {
@@ -692,14 +704,19 @@
                         const typeClass = pos.type === 0 ? 'buy' : 'sell';
                         const profit = pos.profit.toFixed(2);
                         const profitClass = pos.profit >= 0 ? 'positive' : 'negative';
+                        const symbol = pos.symbol || 'Unknown';
+                        // Format prices based on magnitude
+                        const priceOpen = pos.price_open > 100 ? pos.price_open.toFixed(2) : pos.price_open.toFixed(5);
+                        const priceCurrent = pos.price_current > 100 ? pos.price_current.toFixed(2) : pos.price_current.toFixed(5);
                         html += `
                             <div class="trade-row trade-${typeClass}" style="padding: 8px 10px; margin-bottom: 6px; border-radius: 6px; background: rgba(0,212,255,0.05);">
                                 <div style="display: flex; justify-content: space-between; align-items: center; gap: 8px;">
                                     <div style="flex: 1;">
                                         <strong style="color: var(--accent-${typeClass === 'buy' ? 'green' : 'red'})">${type}</strong>
+                                        <span style="color: var(--accent); font-size: 10px; margin-left: 4px;">${symbol}</span>
                                         <span style="color: var(--text-secondary); font-size: 10px; margin-left: 4px;">${pos.volume}lot</span>
                                         <div style="font-size: 10px; color: var(--text-secondary);">
-                                            ${pos.price_open.toFixed(5)} → ${pos.price_current.toFixed(5)}
+                                            ${priceOpen} → ${priceCurrent}
                                         </div>
                                     </div>
                                     <div class="${profitClass}" style="font-weight: bold; font-size: 13px;">
