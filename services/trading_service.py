@@ -150,8 +150,26 @@ class TradingService:
         # Check if already have position for THIS symbol
         positions = mt5_service.get_open_positions(symbol=symbol)
         if positions:
-            self.stats["last_action"] = f"Skipped: Position open ({symbol})"
-            return {"action": "skip", "reason": f"Position open for {symbol}"}
+            # SIGNAL REVERSAL: Check if signal is opposite to current position
+            current_pos = positions[0]
+            current_type = "buy" if current_pos["type"] == 0 else "sell"
+            
+            # If signal is opposite, close current and continue to open new
+            if (current_type == "buy" and signal == "sell") or (current_type == "sell" and signal == "buy"):
+                logger.info(f"[{symbol}] SIGNAL REVERSAL: Closing {current_type.upper()} to open {signal.upper()}")
+                close_result = mt5_service.close_position(current_pos["ticket"])
+                
+                if close_result.get("success"):
+                    self.stats["last_action"] = f"REVERSAL: Closed {current_type.upper()}"
+                    logger.info(f"[{symbol}] Position closed for reversal")
+                    # Continue to open new position below
+                else:
+                    self.stats["last_action"] = f"REVERSAL FAILED: {close_result.get('error')}"
+                    return {"action": "failed", "error": f"Failed to close for reversal: {close_result.get('error')}"}
+            else:
+                # Same direction signal, skip
+                self.stats["last_action"] = f"Skipped: Position open ({symbol})"
+                return {"action": "skip", "reason": f"Position open for {symbol}"}
         
         # Check spread filter
         # Check spread filter

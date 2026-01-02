@@ -298,6 +298,82 @@ def run_backtest(
                 dd = (peak_balance - balance) / peak_balance * 100
                 max_drawdown = max(max_drawdown, dd)
         
+        # SIGNAL REVERSAL: Check if opposite signal appears while in position
+        if position is not None:
+            signal_reversal = False
+            new_signal_type = None
+            
+            # Check for opposite signal
+            if position == "buy" and (row.get("trend_sell", False) or row.get("mr_sell", False)):
+                signal_reversal = True
+                new_signal_type = "TREND" if row.get("trend_sell", False) else "MR"
+            elif position == "sell" and (row.get("trend_buy", False) or row.get("mr_buy", False)):
+                signal_reversal = True  
+                new_signal_type = "TREND" if row.get("trend_buy", False) else "MR"
+            
+            # If reversal signal detected, close current and open opposite
+            if signal_reversal:
+                # Close current position
+                exit_price = price
+                if position == "buy":
+                    pnl = (exit_price - entry_price) * position_size * 100000
+                else:
+                    pnl = (entry_price - exit_price) * position_size * 100000
+                
+                balance += pnl
+                
+                trades.append({
+                    'entry_time': entry_time,
+                    'exit_time': current_time,
+                    'type': position,
+                    'signal_type': signal_type,
+                    'entry_price': entry_price,
+                    'exit_price': exit_price,
+                    'size': position_size,
+                    'pnl': pnl,
+                    'balance': balance,
+                    'exit_reason': 'REVERSAL',
+                    'bars_held': bars_in_trade
+                })
+                
+                # Update max drawdown
+                if balance > peak_balance:
+                    peak_balance = balance
+                dd = (peak_balance - balance) / peak_balance * 100
+                max_drawdown = max(max_drawdown, dd)
+                
+                # Open new position in opposite direction
+                risk_amount = balance * risk_per_trade
+                params = STRATEGY_PARAMS[new_signal_type]
+                sl_dist = atr * params["SL_ATR"]
+                
+                if sl_dist > 0:
+                    # Determine new position direction
+                    new_position = "sell" if position == "buy" else "buy"
+                    position = new_position
+                    signal_type = new_signal_type
+                    entry_price = price
+                    position_size = risk_amount / (sl_dist * 100000)
+                    position_size = max(0.01, min(position_size, 10.0))
+                    bars_in_trade = 0
+                    entry_time = current_time
+                    
+                    if position == "buy":
+                        stop_loss = price - sl_dist
+                        take_profit = price + atr * params["TP_ATR"]
+                        highest = price
+                        lowest = float('inf')
+                    else:
+                        stop_loss = price + sl_dist
+                        take_profit = price - atr * params["TP_ATR"]
+                        lowest = price
+                        highest = 0
+                else:
+                    # If can't open new position, just close
+                    position = None
+                    
+                continue  # Skip normal exit/entry logic for this bar
+        
         # Entry logic
         if position is None:
             risk_amount = balance * risk_per_trade
