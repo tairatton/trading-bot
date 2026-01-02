@@ -344,7 +344,7 @@ class MT5Service:
                     result.append({
                         "ticket": d.get('ticket'),
                         "time": datetime.fromtimestamp(d.get('time', 0)).strftime("%Y-%m-%d %H:%M"),
-                        "type": "BUY" if d.get('type') == 0 else "SELL",
+                        "type": "SELL" if d.get('type') == 0 else "BUY",  # Flip: closing BUY means original was SELL
                         "symbol": d.get('symbol'),
                         "volume": d.get('volume'),
                         "price": d.get('price'),
