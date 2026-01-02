@@ -29,17 +29,29 @@ class Settings:
     SESSION_START_UTC: int = int(os.getenv('SESSION_START_UTC', '8'))
     SESSION_END_UTC: int = int(os.getenv('SESSION_END_UTC', '20'))
     
-    # Strategy Parameters (Optimized - matching backtest.py)
+    # Strategy Parameters (Configurable via .env)
     PARAMS = {
-        "TREND": {"SL_ATR": 1.2, "TP_ATR": 3.5, "TRAIL_START": 1.8, "TRAIL_DIST": 1.2, "MAX_BARS": 60},
-        "MR": {"SL_ATR": 1.0, "TP_ATR": 2.5, "TRAIL_START": 1.2, "TRAIL_DIST": 0.8, "MAX_BARS": 30}
+        "TREND": {
+            "SL_ATR": float(os.getenv('TREND_SL_ATR', '1.2')),
+            "TP_ATR": float(os.getenv('TREND_TP_ATR', '3.5')),
+            "TRAIL_START": float(os.getenv('TREND_TRAIL_START', '1.8')),
+            "TRAIL_DIST": float(os.getenv('TREND_TRAIL_DIST', '1.2')),
+            "MAX_BARS": int(os.getenv('TREND_MAX_BARS', '60'))
+        },
+        "MR": {
+            "SL_ATR": float(os.getenv('MR_SL_ATR', '1.0')),
+            "TP_ATR": float(os.getenv('MR_TP_ATR', '2.5')),
+            "TRAIL_START": float(os.getenv('MR_TRAIL_START', '1.2')),
+            "TRAIL_DIST": float(os.getenv('MR_TRAIL_DIST', '0.8')),
+            "MAX_BARS": int(os.getenv('MR_MAX_BARS', '30'))
+        }
     }
     
     # Spread Filter
     MAX_SPREAD_PIPS: float = float(os.getenv('MAX_SPREAD_PIPS', '3.0'))  # Skip order if spread > this
     
     # News Filter (High Impact Events)
-    NEWS_BLACKOUT_MINUTES: int = 30
+    NEWS_BLACKOUT_MINUTES: int = int(os.getenv('NEWS_BLACKOUT_MINUTES', '30'))
     
     # Web Dashboard
     WEB_HOST: str = os.getenv('WEB_HOST', '0.0.0.0')
