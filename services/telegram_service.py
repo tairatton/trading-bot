@@ -121,6 +121,25 @@ class TelegramService:
 <b>Balance:</b> ${balance:.2f}
 """
         self.send_message(msg.strip())
+    
+    def notify_signal_detected(self, symbol: str, signal: str, signal_type: str,
+                               price: float, rsi: float = 0, adx: float = 0,
+                               is_active_symbol: bool = False):
+        """Notify when a signal is detected on any symbol."""
+        emoji = "🟢" if signal.upper() == "BUY" else "🔴"
+        trade_status = "✅ TRADING" if is_active_symbol else "👀 SIGNAL ONLY"
+        
+        msg = f"""
+{emoji} <b>SIGNAL DETECTED</b>
+
+<b>Symbol:</b> {symbol}
+<b>Signal:</b> {signal.upper()} ({signal_type})
+<b>Price:</b> {price:.5f}
+<b>RSI:</b> {rsi:.1f}
+<b>ADX:</b> {adx:.1f}
+<b>Status:</b> {trade_status}
+"""
+        self.send_message(msg.strip())
 
 
 # Singleton instance

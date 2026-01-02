@@ -387,6 +387,10 @@ class TradingService:
         """Main trading loop."""
         logger.info("========== TRADING BOT STARTED ==========")
         logger.info(f"Active symbol: {settings.SYMBOL}")
+        logger.info(f"Scanning all symbols: {settings.AVAILABLE_SYMBOLS}")
+        
+        # Track last signal per symbol to avoid duplicate alerts
+        last_signals = {}
         
         while self.running:
             if self.paused:
@@ -403,24 +407,53 @@ class TradingService:
                 # Monitor existing positions (trailing stop & time-based exit)
                 self.monitor_positions(mt5_service, data_service)
                 
-                # Fetch fresh data for current symbol
-                df = data_service.fetch_data_from_mt5(mt5_service, symbol=settings.SYMBOL, count=300)
-                if df.empty:
-                    print(f"[{settings.SYMBOL}] WARNING: No data received")
-                    time.sleep(60)
-                    continue
-                
-                # Calculate indicators and signals
-                df = data_service.calculate_indicators(df)
-                df = data_service.generate_signals(df)
-                
-                # Get latest signal
-                signal_info = data_service.get_latest_signal()
-                
-                # Process signal
-                if signal_info["signal"] != "none":
-                    result = self.process_signal(mt5_service, data_service, signal_info, settings.SYMBOL)
-                    print(f"[{settings.SYMBOL}] Signal: {signal_info['signal'].upper()} ({signal_info['signal_type']}) - {result['action']}")
+                # Scan ALL symbols for signals
+                for symbol in settings.AVAILABLE_SYMBOLS:
+                    try:
+                        # Fetch data for this symbol
+                        df = data_service.fetch_data_from_mt5(mt5_service, symbol=symbol, count=300)
+                        if df.empty:
+                            continue
+                        
+                        # Calculate indicators and signals
+                        df = data_service.calculate_indicators(df)
+                        df = data_service.generate_signals(df)
+                        
+                        # Get latest signal
+                        signal_info = data_service.get_latest_signal()
+                        
+                        if signal_info["signal"] != "none":
+                            # Check if this is a new signal (avoid duplicate alerts)
+                            signal_key = f"{symbol}_{signal_info['signal']}_{signal_info['signal_type']}"
+                            
+                            if signal_key != last_signals.get(symbol):
+                                # New signal detected - send Telegram alert
+                                is_active = (symbol == settings.SYMBOL)
+                                
+                                telegram_service.notify_signal_detected(
+                                    symbol=symbol,
+                                    signal=signal_info["signal"],
+                                    signal_type=signal_info["signal_type"],
+                                    price=signal_info["price"],
+                                    rsi=signal_info.get("rsi", 0),
+                                    adx=signal_info.get("adx", 0),
+                                    is_active_symbol=is_active
+                                )
+                                
+                                last_signals[symbol] = signal_key
+                                logger.info(f"[{symbol}] Signal: {signal_info['signal'].upper()} ({signal_info['signal_type']}) - Alert sent")
+                            
+                            # Only trade if this is the active symbol
+                            if symbol == settings.SYMBOL:
+                                result = self.process_signal(mt5_service, data_service, signal_info, symbol)
+                                print(f"[{symbol}] ACTIVE: {signal_info['signal'].upper()} ({signal_info['signal_type']}) - {result['action']}")
+                        else:
+                            # Clear last signal if no signal
+                            last_signals[symbol] = None
+                            
+                    except Exception as e:
+                        logger.warning(f"[{symbol}] Error scanning: {e}")
+                        continue
                 
                 # Update stats
                 self.stats["last_update"] = datetime.now().isoformat()
