@@ -608,7 +608,8 @@
                     document.getElementById('equity').textContent =
                         '$' + (status.account.equity || 0).toFixed(2);
 
-                    const profit = status.account.profit || 0;
+                    // Use open_pnl calculated from ALL positions
+                    const profit = status.open_pnl || status.account.profit || 0;
                     const profitEl = document.getElementById('profit');
                     profitEl.textContent = '$' + profit.toFixed(2);
                     profitEl.className = 'stat-value ' + (profit > 0 ? 'positive' : profit < 0 ? 'negative' : '');

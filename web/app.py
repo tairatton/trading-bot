@@ -173,6 +173,8 @@ async def get_status():
     try:
         account = {}
         price = {}
+        open_pnl = 0.0
+        
         if mt5_service.connected:
             account = mt5_service.get_account_info()
             price_data = mt5_service.get_current_price()
@@ -180,6 +182,10 @@ async def get_status():
             if price_data and 'time' in price_data:
                 price_data['time'] = price_data['time'].isoformat() if hasattr(price_data['time'], 'isoformat') else str(price_data['time'])
             price = price_data
+            
+            # Calculate Open P/L from ALL open positions (not just selected symbol)
+            all_positions = mt5_service.get_open_positions(symbol=None)  # Get all
+            open_pnl = sum(pos.get('profit', 0) for pos in all_positions)
         
         # Calculate total P/L from closed deals (all time)
         total_closed_pnl = 0
@@ -192,6 +198,7 @@ async def get_status():
             "account": account,
             "price": price,
             "mt5_connected": mt5_service.connected,
+            "open_pnl": open_pnl,  # New: calculated from all positions
             "today_pnl": total_closed_pnl,
             "timestamp": datetime.now().isoformat()
         })
