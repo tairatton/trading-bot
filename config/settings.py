@@ -35,6 +35,10 @@ class Settings:
     SESSION_START_UTC: int = int(os.getenv('SESSION_START_UTC', '8'))
     SESSION_END_UTC: int = int(os.getenv('SESSION_END_UTC', '20'))
     
+    # Weekend Safety: Close all trades on Friday to avoid gap risk
+    CLOSE_ON_FRIDAY: bool = os.getenv('CLOSE_ON_FRIDAY', 'true').lower() == 'true'
+    FRIDAY_CLOSE_HOUR_UTC: int = int(os.getenv('FRIDAY_CLOSE_HOUR_UTC', '21'))  # 21:00 UTC = 04:00 TH (Sat)
+    
     # Strategy Parameters (Configurable via .env)
     PARAMS = {
         "TREND": {
@@ -80,6 +84,7 @@ class Settings:
     # Telegram (Optional)
     TELEGRAM_BOT_TOKEN: str = os.getenv('TELEGRAM_BOT_TOKEN', '')
     TELEGRAM_CHAT_ID: str = os.getenv('TELEGRAM_CHAT_ID', '')
+    ENABLE_SIGNAL_ALERTS: bool = os.getenv('ENABLE_SIGNAL_ALERTS', 'false').lower() == 'true'
     
     @classmethod
     def is_mt5_configured(cls) -> bool:

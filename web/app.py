@@ -223,18 +223,21 @@ async def get_positions():
 @app.post("/api/settings")
 async def update_settings(
     risk_percent: float = Form(...),
-    symbol: str = Form("EURUSDm")
+    symbol: str = Form("EURUSDm"),
+    enable_signal_alerts: bool = Form(False)
 ):
     """Update trading settings."""
     settings.RISK_PERCENT = risk_percent
     settings.SYMBOL = symbol
+    settings.ENABLE_SIGNAL_ALERTS = enable_signal_alerts
     
     return JSONResponse({
         "success": True,
-        "message": f"Settings updated. Symbol: {settings.SYMBOL}",
+        "message": "Settings updated",
         "settings": {
             "risk_percent": settings.RISK_PERCENT,
-            "symbol": settings.SYMBOL
+            "symbol": settings.SYMBOL,
+            "enable_signal_alerts": settings.ENABLE_SIGNAL_ALERTS
         }
     })
 

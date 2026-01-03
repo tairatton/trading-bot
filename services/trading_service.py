@@ -404,6 +404,28 @@ class TradingService:
                     print("[BOT] MT5 connection failed, waiting 60 seconds...")
                     time.sleep(60)
                     continue
+
+                # =========================================================
+                # WEEKEND SAFETY MODE (Friday Force Close)
+                # =========================================================
+                if settings.CLOSE_ON_FRIDAY and datetime.utcnow().weekday() == 4:
+                    if datetime.utcnow().hour >= settings.FRIDAY_CLOSE_HOUR_UTC:
+                        logger.warning("[WEEKEND] Cut-off time reached! Closing all positions to sleep well 😴")
+                        
+                        # Close all open positions
+                        positions = mt5_service.get_open_positions()
+                        if positions:
+                            res = mt5_service.close_all_positions()
+                            if res["closed"] > 0:
+                                msg = f"🛑 <b>WEEKEND FORCE CLOSE</b>\n\nClosed {res['closed']} positions to avoid gap risk.\nSee you next week! 👋"
+                                telegram_service.send_message(msg)
+                                logger.info(f"[WEEKEND] Closed {res['closed']} positions")
+                        
+                        # Wait and skip trading scan
+                        logger.info("[WEEKEND] Standing by until Monday...")
+                        time.sleep(300) # Sleep 5 minutes
+                        continue
+                # =========================================================
                 
                 # Monitor existing positions (trailing stop & time-based exit)
                 self.monitor_positions(mt5_service, data_service)
@@ -428,24 +450,28 @@ class TradingService:
                             signal_key = f"{symbol}_{signal_info['signal']}_{signal_info['signal_type']}"
                             
                             if signal_key != last_signals.get(symbol):
-                                # New signal detected - send Telegram alert
+                                # New signal detected
                                 is_active = (symbol in settings.ACTIVE_SYMBOLS)
                                 
-                                telegram_service.notify_signal_detected(
-                                    symbol=symbol,
-                                    signal=signal_info["signal"],
-                                    signal_type=signal_info["signal_type"],
-                                    price=signal_info["price"],
-                                    rsi=signal_info.get("rsi", 0),
-                                    adx=signal_info.get("adx", 0),
-                                    is_active_symbol=is_active,
-                                    strength=signal_info.get("strength", ""),
-                                    strength_score=signal_info.get("strength_score", 0),
-                                    strength_factors=signal_info.get("strength_factors", [])
-                                )
+                                # Only send Telegram alert if enabled
+                                if settings.ENABLE_SIGNAL_ALERTS:
+                                    telegram_service.notify_signal_detected(
+                                        symbol=symbol,
+                                        signal=signal_info["signal"],
+                                        signal_type=signal_info["signal_type"],
+                                        price=signal_info["price"],
+                                        rsi=signal_info.get("rsi", 0),
+                                        adx=signal_info.get("adx", 0),
+                                        is_active_symbol=is_active,
+                                        strength=signal_info.get("strength", ""),
+                                        strength_score=signal_info.get("strength_score", 0),
+                                        strength_factors=signal_info.get("strength_factors", [])
+                                    )
+                                    logger.info(f"[{symbol}] Signal Alert Sent: {signal_info['signal']}")
+                                else:
+                                    logger.info(f"[{symbol}] Signal Detected (Alert Disabled): {signal_info['signal']}")
                                 
                                 last_signals[symbol] = signal_key
-                                logger.info(f"[{symbol}] Signal: {signal_info['signal'].upper()} ({signal_info['signal_type']}) - Alert sent")
                             
                             # Trade if this symbol is in ACTIVE_SYMBOLS (multi-symbol trading)
                             if symbol in settings.ACTIVE_SYMBOLS:

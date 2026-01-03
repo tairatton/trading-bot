@@ -352,7 +352,30 @@ class MT5Service:
                         "comment": d.get('comment', '')
                     })
             return result[-20:]  # Return last 20 closed deals
+            return result[-20:]  # Return last 20 closed deals
         return []
+
+    def close_all_positions(self) -> Dict[str, int]:
+        """Close ALL open positions immediately (Emergency or Weekend Close)."""
+        positions = self.get_open_positions()
+        if not positions:
+            return {"closed": 0, "failed": 0, "message": "No positions to close"}
+            
+        closed_count = 0
+        failed_count = 0
+        
+        for pos in positions:
+            res = self.close_position(pos["ticket"])
+            if res["success"]:
+                closed_count += 1
+            else:
+                failed_count += 1
+                
+        return {
+            "closed": closed_count, 
+            "failed": failed_count, 
+            "message": f"Closed {closed_count}, Failed {failed_count}"
+        }
 
 
 # Singleton instance

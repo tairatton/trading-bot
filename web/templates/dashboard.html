@@ -333,9 +333,6 @@
             <!-- Account Info -->
             <div class="card">
                 <h2>📊 Account</h2>
-                <div class="price-display" id="currentPrice" style="font-size: 24px; padding: 15px;">
-                    {% if mt5_connected %}$---.----{% else %}Not Connected{% endif %}
-                </div>
                 <div class="stat-row">
                     <span class="stat-label">Balance</span>
                     <span class="stat-value" id="balance">${{ "%.2f"|format(account.balance|default(0)) }}</span>
@@ -408,11 +405,75 @@
             <div class="card">
                 <h2>⚙️ Settings</h2>
                 <form class="settings-form" onsubmit="updateSettings(event)">
-                    <div class="form-group">
-                        <label>Risk (%)</label>
-                        <input type="number" step="0.1" min="0.1" max="5" id="riskPercent"
-                            value="{{ settings.risk_percent }}">
+                    <div style="margin-bottom: 12px;">
+                        <label
+                            style="color: var(--text-secondary); font-size: 12px; margin-bottom: 4px; display: block;">Risk
+                            (%)</label>
+                        <input type="number" id="riskPercent" step="0.1" value="{{ settings.risk_percent }}"
+                            style="width: 100%; padding: 8px; background: var(--bg-secondary); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: 6px; font-size: 13px;">
                     </div>
+
+                    <div
+                        style="margin-bottom: 16px; display: flex; align-items: center; justify-content: space-between;">
+                        <label style="color: var(--text-secondary); font-size: 12px;">📱 Signal Alerts
+                            (Telegram)</label>
+                        <label class="switch">
+                            <input type="checkbox" id="signalAlertsToggle" {% if settings.enable_signal_alerts
+                                %}checked{% endif %}>
+                            <span class="slider round"></span>
+                        </label>
+                    </div>
+
+                    <style>
+                        /* Toggle Switch CSS */
+                        .switch {
+                            position: relative;
+                            display: inline-block;
+                            width: 40px;
+                            height: 20px;
+                        }
+
+                        .switch input {
+                            opacity: 0;
+                            width: 0;
+                            height: 0;
+                        }
+
+                        .slider {
+                            position: absolute;
+                            cursor: pointer;
+                            top: 0;
+                            left: 0;
+                            right: 0;
+                            bottom: 0;
+                            background-color: var(--bg-secondary);
+                            transition: .4s;
+                            border-radius: 20px;
+                            border: 1px solid var(--border-color);
+                        }
+
+                        .slider:before {
+                            position: absolute;
+                            content: "";
+                            height: 14px;
+                            width: 14px;
+                            left: 3px;
+                            bottom: 2px;
+                            background-color: var(--text-secondary);
+                            transition: .4s;
+                            border-radius: 50%;
+                        }
+
+                        input:checked+.slider {
+                            background-color: var(--accent-green);
+                            border-color: var(--accent-green);
+                        }
+
+                        input:checked+.slider:before {
+                            transform: translateX(20px);
+                            background-color: white;
+                        }
+                    </style>
                     <div class="form-group">
                         <label style="color: var(--accent-green);">Trading Mode</label>
                         <div
@@ -490,13 +551,28 @@
             formData.append('risk_percent', document.getElementById('riskPercent').value);
             // formData.append('symbol', document.getElementById('symbolSelect').value); // Removed symbol selection
 
-            const response = await fetch('/api/settings', { method: 'POST', body: formData });
-            const data = await response.json();
-            alert(data.message);
+            // Checkbox value
+            const alertEnabled = document.getElementById('signalAlertsToggle').checked;
+            formData.append('enable_signal_alerts', alertEnabled);
 
-            // Reload to update UI
-            if (data.success !== false) {
-                location.reload();
+            try {
+                const response = await fetch('/api/settings', { method: 'POST', body: formData });
+                const data = await response.json();
+
+                // Show save confirmation
+                const btn = e.target.querySelector('button[type="submit"]'); // Target the submit button specifically
+                const originalText = btn.textContent;
+                const originalBackground = btn.style.background; // Store original background
+                btn.textContent = 'Saved! ✅';
+                btn.style.background = 'var(--accent-green)';
+
+                setTimeout(() => {
+                    btn.textContent = originalText;
+                    btn.style.background = originalBackground; // Restore original background
+                }, 2000);
+            } catch (err) {
+                console.error('Save failed:', err);
+                alert('Failed to save settings');
             }
         }
 
@@ -511,10 +587,23 @@
                 if (!statusRes.ok) throw new Error('Status fetch failed');
                 const status = await statusRes.json();
 
-                todayEl.textContent = '$' + (todayPnl > 0 ? '+' : '') + todayPnl.toFixed(2);
-                todayEl.className = 'stat-value ' + (todayPnl > 0 ? 'positive' : todayPnl < 0 ? 'negative' : '');
+                if (status.account) {
+                    document.getElementById('balance').textContent = '$' + (status.account.balance || 0).toFixed(2);
+                    document.getElementById('equity').textContent = '$' + (status.account.equity || 0).toFixed(2);
 
+                    const profit = status.open_pnl || status.account.profit || 0;
+                    const profitEl = document.getElementById('profit');
+                    profitEl.textContent = '$' + profit.toFixed(2);
+                    profitEl.className = 'stat-value ' + (profit > 0 ? 'positive' : profit < 0 ? 'negative' : '');
+                }
 
+                // Closed P/L
+                const todayPnl = status.today_pnl || 0;
+                const todayEl = document.getElementById('todayPL');
+                if (todayEl) {
+                    todayEl.textContent = '$' + (todayPnl > 0 ? '+' : '') + todayPnl.toFixed(2);
+                    todayEl.className = 'stat-value ' + (todayPnl > 0 ? 'positive' : todayPnl < 0 ? 'negative' : '');
+                }
 
                 // Reset error count on success
                 networkErrorCount = 0;
