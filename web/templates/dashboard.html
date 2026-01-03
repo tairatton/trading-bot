@@ -93,7 +93,7 @@
 
         .main-layout {
             display: grid;
-            grid-template-columns: repeat(5, 1fr);
+            grid-template-columns: repeat(4, 1fr);
             gap: 10px;
             align-items: stretch;
             margin-top: 20px;
@@ -356,29 +356,14 @@
                     <span class="stat-label">Closed P/L</span>
                     <span class="stat-value" id="todayPL">--</span>
                 </div>
-                <div class="stat-row">
-                    <span class="stat-label">Symbol</span>
-                    <span class="stat-value">{{ settings.symbol }}</span>
-                </div>
+
             </div>
 
             <!-- Controls -->
             <div class="card">
                 <h2>🎛️ Controls</h2>
                 <div style="display: flex; flex-direction: column; gap: 8px; width: 100%;">
-                    <!-- Symbol Selection (Dropdown) -->
-                    <div style="margin-bottom: 8px;">
-                        <label
-                            style="color: var(--text-secondary); font-size: 12px; margin-bottom: 4px; display: block;">Symbol:</label>
-                        <select id="symbolSelect" onchange="saveSymbol()"
-                            style="width: 100%; padding: 8px; background: var(--bg-secondary); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: 6px; font-size: 13px; cursor: pointer;">
-                            {% for sym in settings.available_symbols %}
-                            <option value="{{ sym }}" {% if sym==settings.active_symbol %}selected{% endif %}>
-                                {{ sym }}
-                            </option>
-                            {% endfor %}
-                        </select>
-                    </div>
+
                     <button class="btn btn-connect" onclick="toggleConnection()" id="btnConnect" style="width: 100%;">
                         {% if mt5_connected %}Disconnect{% else %}Connect MT5{% endif %}
                     </button>
@@ -417,36 +402,7 @@
                 </div>
             </div>
 
-            <!-- Current Signal -->
-            <div class="card">
-                <h2>📡 Signal</h2>
-                <div class="signal-display" id="signalDisplay">
-                    <div class="signal-none">No Signal</div>
-                </div>
-                <div class="stat-row">
-                    <span class="stat-label">RSI</span>
-                    <span class="stat-value" id="rsiValue">--</span>
-                </div>
-                <div class="stat-row">
-                    <span class="stat-label">ADX</span>
-                    <span class="stat-value" id="adxValue">--</span>
-                </div>
-                <div class="stat-row">
-                    <span class="stat-label">ATR</span>
-                    <span class="stat-value" id="atrValue">--</span>
-                </div>
-                <div class="stat-row">
-                    <span class="stat-label">Last Action</span>
-                    <span class="stat-value" id="botAction"
-                        style="font-size: 10px; white-space: normal; text-align: right; line-height: 1.2;">--</span>
-                </div>
-                <div
-                    style="margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.1); text-align: center;">
-                    <small style="color: var(--text-secondary); font-size: 10px;">⏱️ M30 Timeframe - Updates every 30
-                        mins to
-                        filter noise</small>
-                </div>
-            </div>
+
 
             <!-- Settings & Forecast -->
             <div class="card">
@@ -526,34 +482,13 @@
             location.reload();
         }
 
-        async function saveSymbol() {
-            const symbol = document.getElementById('symbolSelect').value;
-            const formData = new FormData();
-            formData.append('risk_percent', document.getElementById('riskPercent').value);
-            formData.append('symbol', symbol);
 
-            try {
-                const response = await fetch('/api/settings', { method: 'POST', body: formData });
-                const data = await response.json();
-                console.log('Symbol updated:', data);
-
-                // Show confirmation
-                const select = document.getElementById('symbolSelect');
-                select.style.borderColor = 'var(--accent-green)';
-                setTimeout(() => select.style.borderColor = '', 1000);
-
-                // Refresh signal display for new symbol
-                updateStatus();
-            } catch (e) {
-                console.error('Failed to save symbol:', e);
-            }
-        }
 
         async function updateSettings(e) {
             e.preventDefault();
             const formData = new FormData();
             formData.append('risk_percent', document.getElementById('riskPercent').value);
-            formData.append('symbol', document.getElementById('symbolSelect').value);
+            // formData.append('symbol', document.getElementById('symbolSelect').value); // Removed symbol selection
 
             const response = await fetch('/api/settings', { method: 'POST', body: formData });
             const data = await response.json();
@@ -576,83 +511,10 @@
                 if (!statusRes.ok) throw new Error('Status fetch failed');
                 const status = await statusRes.json();
 
-                // Update bot status
-                const statusEl = document.getElementById('botStatus');
-                if (status.bot) {
-                    // Update Action Status
-                    const actionEl = document.getElementById('botAction');
-                    if (actionEl && status.bot.stats && status.bot.stats.last_action) {
-                        const action = status.bot.stats.last_action;
-                        actionEl.textContent = action;
-                        actionEl.title = action; // Tooltip
-
-                        if (action.includes("OPENED")) actionEl.style.color = "var(--accent-green)";
-                        else if (action.includes("FAILED")) actionEl.style.color = "var(--accent-red)";
-                        else if (action.includes("Skipped")) actionEl.style.color = "#ffb74d"; // orange
-                        else actionEl.style.color = "var(--text-secondary)";
-                    }
-
-                    if (status.bot.running) {
-                        if (status.bot.paused) { /* This block was incomplete in the instruction, closing it here */ }
-                    }
-                }
-
-                if (status.price && status.price.bid) {
-                    const price = status.price.bid;
-                    // Format price based on magnitude (Crypto vs Forex)
-                    let formattedPrice;
-                    if (price > 100) {
-                        // Crypto (BTC, Gold, etc.) - show 2 decimals
-                        formattedPrice = '$' + price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-                    } else {
-                        // Forex - show 5 decimals
-                        formattedPrice = '$' + price.toFixed(5);
-                    }
-                    document.getElementById('currentPrice').textContent = formattedPrice;
-                } else {
-                    // Show waiting message if no price data
-                    document.getElementById('currentPrice').textContent = 'Waiting...';
-                }
-
-                if (status.account) {
-                    document.getElementById('balance').textContent =
-                        '$' + (status.account.balance || 0).toFixed(2);
-                    document.getElementById('equity').textContent =
-                        '$' + (status.account.equity || 0).toFixed(2);
-
-                    // Use open_pnl calculated from ALL positions
-                    const profit = status.open_pnl || status.account.profit || 0;
-                    const profitEl = document.getElementById('profit');
-                    profitEl.textContent = '$' + profit.toFixed(2);
-                    profitEl.className = 'stat-value ' + (profit > 0 ? 'positive' : profit < 0 ? 'negative' : '');
-                }
-
-                // Closed P/L from all closed trades
-                const todayPnl = status.today_pnl || 0;
-                const todayEl = document.getElementById('todayPL');
                 todayEl.textContent = '$' + (todayPnl > 0 ? '+' : '') + todayPnl.toFixed(2);
                 todayEl.className = 'stat-value ' + (todayPnl > 0 ? 'positive' : todayPnl < 0 ? 'negative' : '');
 
-                // Get signal
-                const signalRes = await fetch('/api/signal');
-                if (!signalRes.ok) throw new Error('Signal fetch failed');
-                const signal = await signalRes.json();
 
-                const signalDisplay = document.getElementById('signalDisplay');
-                if (signal.signal && signal.signal !== 'none') {
-                    signalDisplay.innerHTML = `
-                        <div class="signal-${signal.signal.toLowerCase()}">
-                            ${signal.signal.toUpperCase()} (${signal.signal_type || ''})
-                        </div>
-                        <small>${signal.can_trade ? '✅ Can Trade' : '❌ ' + signal.reason}</small>
-                    `;
-                } else {
-                    signalDisplay.innerHTML = '<div class="signal-none">No Signal</div>';
-                }
-
-                if (signal.rsi) document.getElementById('rsiValue').textContent = signal.rsi.toFixed(1);
-                if (signal.adx) document.getElementById('adxValue').textContent = signal.adx.toFixed(1);
-                if (signal.atr) document.getElementById('atrValue').textContent = signal.atr.toFixed(5);
 
                 // Reset error count on success
                 networkErrorCount = 0;
@@ -762,17 +624,27 @@
                 const container = document.getElementById('historyContainer');
 
                 if (data.deals && data.deals.length > 0) {
-                    let html = '<table style="width: 100%; font-size: 11px; border-collapse: collapse;">';
-                    html += '<tr style="color: var(--text-secondary); border-bottom: 1px solid rgba(0,212,255,0.1);"><th>Time</th><th>Type</th><th>Vol</th><th>Price</th><th>Profit</th></tr>';
+                    let html = '<table style="width: 100%; font-size: 13px; border-collapse: collapse; table-layout: fixed;">';
+                    html += `
+                        <tr style="color: var(--text-secondary); border-bottom: 1px solid rgba(0,212,255,0.1); height: 30px; position: sticky; top: 0; background: var(--bg-card); z-index: 1;">
+                            <th style="text-align: left; padding: 8px; width: 22%;">Time</th>
+                            <th style="text-align: left; padding: 8px; width: 18%;">Sym</th>
+                            <th style="text-align: center; padding: 8px; width: 10%;">Type</th>
+                            <th style="text-align: right; padding: 8px; width: 12%;">Vol</th>
+                            <th style="text-align: right; padding: 8px; width: 18%;">Price</th>
+                            <th style="text-align: right; padding: 8px; width: 20%;">Profit</th>
+                        </tr>`;
                     data.deals.reverse().forEach(deal => {
                         const profitClass = deal.profit >= 0 ? 'positive' : 'negative';
+                        const profitColor = deal.profit >= 0 ? 'var(--accent-green)' : 'var(--accent-red)';
                         html += `
-                            <tr style="border-bottom: 1px solid rgba(0,212,255,0.05);">
-                                <td style="padding: 4px;">${deal.time}</td>
-                                <td style="color: ${deal.type === 'BUY' ? 'var(--accent-green)' : 'var(--accent-red)'};">${deal.type}</td>
-                                <td>${deal.volume}</td>
-                                <td>${deal.price.toFixed(5)}</td>
-                                <td class="${profitClass}">$${deal.profit.toFixed(2)}</td>
+                            <tr style="border-bottom: 1px solid rgba(0,212,255,0.05); height: 35px;">
+                                <td style="text-align: left; padding: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${deal.time}</td>
+                                <td style="text-align: left; padding: 8px; color: var(--accent); font-weight: 500;">${deal.symbol || '-'}</td>
+                                <td style="text-align: center; padding: 8px; color: ${deal.type === 'BUY' ? 'var(--accent-green)' : 'var(--accent-red)'}; font-weight: bold;">${deal.type}</td>
+                                <td style="text-align: right; padding: 8px;">${deal.volume}</td>
+                                <td style="text-align: right; padding: 8px;">${deal.price.toFixed(5)}</td>
+                                <td style="text-align: right; padding: 8px; color: ${profitColor}; font-weight: bold;">$${deal.profit.toFixed(2)}</td>
                             </tr>
                         `;
                     });

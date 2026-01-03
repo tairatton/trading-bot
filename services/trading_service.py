@@ -172,12 +172,12 @@ class TradingService:
                 self.stats["last_action"] = f"Skipped: Position open ({symbol})"
                 return {"action": "skip", "reason": f"Position open for {symbol}"}
         
-        # Check spread filter
-        # Check spread filter
+        # Check spread filter - use per-symbol limit
         current_spread = mt5_service.get_current_spread(symbol=symbol)
-        if current_spread > settings.MAX_SPREAD_PIPS:
-            logger.warning(f"[{symbol}] SPREAD FILTER: {current_spread:.1f} pips > Max {settings.MAX_SPREAD_PIPS}")
-            self.stats["last_action"] = f"Skipped: Spread {current_spread:.1f} > {settings.MAX_SPREAD_PIPS}"
+        max_spread = settings.get_max_spread(symbol)
+        if current_spread > max_spread:
+            logger.warning(f"[{symbol}] SPREAD FILTER: {current_spread:.1f} pips > Max {max_spread}")
+            self.stats["last_action"] = f"Skipped: Spread {current_spread:.1f} > {max_spread}"
             return {"action": "skip", "reason": f"Spread too high ({current_spread:.1f} pips)"}
         
         # Calculate position size
@@ -261,24 +261,25 @@ class TradingService:
                 self.position_original_sl = 0
             return
         
-        # Get current price and ATR
-        current_price_info = mt5_service.get_current_price()
-        if not current_price_info:
-            return
-        
-        # Get latest data for ATR
-        df = data_service.fetch_data_from_mt5(mt5_service, count=50)
-        if df.empty:
-            return
-        df = data_service.calculate_indicators(df)
-        current_atr = df.iloc[-1]["ATR"]
-        
         for pos in positions:
             ticket = pos["ticket"]
+            pos_symbol = pos.get("symbol", settings.SYMBOL)  # Get symbol from position
             pos_type = "buy" if pos["type"] == 0 else "sell"
             entry_price = pos["price_open"]
             current_sl = pos["sl"]
             current_tp = pos["tp"]
+            
+            # Get current price for THIS specific symbol
+            current_price_info = mt5_service.get_current_price(symbol=pos_symbol)
+            if not current_price_info:
+                continue
+            
+            # Get ATR for THIS specific symbol
+            df = data_service.fetch_data_from_mt5(mt5_service, symbol=pos_symbol, count=50)
+            if df.empty:
+                continue
+            df = data_service.calculate_indicators(df)
+            current_atr = df.iloc[-1]["ATR"]
             
             # Initialize tracking if this is a new position
             if self.current_position is None or self.current_position.get("ticket") != ticket:
@@ -386,7 +387,7 @@ class TradingService:
     def run_loop(self, mt5_service, data_service):
         """Main trading loop."""
         logger.info("========== TRADING BOT STARTED ==========")
-        logger.info(f"Active symbol: {settings.SYMBOL}")
+        logger.info(f"Active trading symbols: {settings.ACTIVE_SYMBOLS}")
         logger.info(f"Scanning all symbols: {settings.AVAILABLE_SYMBOLS}")
         
         # Track last signal per symbol to avoid duplicate alerts
@@ -428,7 +429,7 @@ class TradingService:
                             
                             if signal_key != last_signals.get(symbol):
                                 # New signal detected - send Telegram alert
-                                is_active = (symbol == settings.SYMBOL)
+                                is_active = (symbol in settings.ACTIVE_SYMBOLS)
                                 
                                 telegram_service.notify_signal_detected(
                                     symbol=symbol,
@@ -446,8 +447,8 @@ class TradingService:
                                 last_signals[symbol] = signal_key
                                 logger.info(f"[{symbol}] Signal: {signal_info['signal'].upper()} ({signal_info['signal_type']}) - Alert sent")
                             
-                            # Only trade if this is the active symbol
-                            if symbol == settings.SYMBOL:
+                            # Trade if this symbol is in ACTIVE_SYMBOLS (multi-symbol trading)
+                            if symbol in settings.ACTIVE_SYMBOLS:
                                 result = self.process_signal(mt5_service, data_service, signal_info, symbol)
                                 print(f"[{symbol}] ACTIVE: {signal_info['signal'].upper()} ({signal_info['signal_type']}) - {result['action']}")
                         else:
@@ -485,7 +486,8 @@ class TradingService:
         self.thread.start()
         
         # Send Telegram notification
-        telegram_service.notify_bot_started(settings.SYMBOL, settings.RISK_PERCENT)
+        symbols_str = ', '.join(settings.ACTIVE_SYMBOLS)
+        telegram_service.notify_bot_started(symbols_str, settings.RISK_PERCENT)
         
         return {"success": True, "message": "Bot started"}
     

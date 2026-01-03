@@ -23,7 +23,13 @@ class Settings:
         "XAUUSDm", "XAGUSDm",  # Gold, Silver
         "BTCUSDm", "ETHUSDm",  # Crypto
     ]
-    SYMBOL: str = os.getenv('SYMBOL', 'EURUSDm')  # Active trading symbol
+    
+    # Active symbols for trading (Top 3 by Profit Factor)
+    # Supports trading multiple symbols with 1 order per symbol max
+    ACTIVE_SYMBOLS_STR: str = os.getenv('ACTIVE_SYMBOLS', 'EURUSDm,USDCADm,USDCHFm')
+    ACTIVE_SYMBOLS: list = [s.strip() for s in ACTIVE_SYMBOLS_STR.split(',') if s.strip()]
+    
+    SYMBOL: str = os.getenv('SYMBOL', 'EURUSDm')  # Legacy: Default single symbol
     TIMEFRAME: str = os.getenv('TIMEFRAME', 'M30')
     RISK_PERCENT: float = float(os.getenv('RISK_PERCENT', '1.5'))
     SESSION_START_UTC: int = int(os.getenv('SESSION_START_UTC', '8'))
@@ -47,8 +53,21 @@ class Settings:
         }
     }
     
-    # Spread Filter
-    MAX_SPREAD_PIPS: float = float(os.getenv('MAX_SPREAD_PIPS', '3.0'))  # Skip order if spread > this
+    # Spread Filter - Per Asset Class
+    MAX_SPREAD_FOREX: float = float(os.getenv('MAX_SPREAD_FOREX', '3.0'))   # Forex pairs
+    MAX_SPREAD_METALS: float = float(os.getenv('MAX_SPREAD_METALS', '50.0'))  # Gold/Silver
+    MAX_SPREAD_CRYPTO: float = float(os.getenv('MAX_SPREAD_CRYPTO', '5000.0'))  # BTC/ETH
+    MAX_SPREAD_PIPS: float = MAX_SPREAD_FOREX  # Legacy fallback
+    
+    @classmethod
+    def get_max_spread(cls, symbol: str) -> float:
+        """Get max spread limit for a symbol based on asset class."""
+        symbol_upper = symbol.upper()
+        if "BTC" in symbol_upper or "ETH" in symbol_upper:
+            return cls.MAX_SPREAD_CRYPTO
+        elif "XAU" in symbol_upper or "XAG" in symbol_upper:
+            return cls.MAX_SPREAD_METALS
+        return cls.MAX_SPREAD_FOREX
     
     # News Filter (High Impact Events)
     NEWS_BLACKOUT_MINUTES: int = int(os.getenv('NEWS_BLACKOUT_MINUTES', '30'))
