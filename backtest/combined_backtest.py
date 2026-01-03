@@ -11,9 +11,9 @@ import pandas as pd
 import numpy as np
 from services.strategy import calculate_indicators, generate_signals, STRATEGY_PARAMS
 
-SYMBOLS = ["EURUSDm", "USDJPYm"]
+SYMBOLS = ["EURUSDm", "USDCADm", "USDJPYm"]
 INITIAL_BALANCE = 10000.0  # 10,000 THB for Exness Cent
-RISK_PER_TRADE = 0.02  # 0.5% per symbol (total 2% max with 4 symbols)
+RISK_PER_TRADE = 0.005  # 0.5% per symbol (Target config)
 
 # RR 1:2 Custom Params (tighter TP for higher win rate)
 CUSTOM_PARAMS = {
