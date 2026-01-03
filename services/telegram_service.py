@@ -124,21 +124,31 @@ class TelegramService:
     
     def notify_signal_detected(self, symbol: str, signal: str, signal_type: str,
                                price: float, rsi: float = 0, adx: float = 0,
-                               is_active_symbol: bool = False):
+                               is_active_symbol: bool = False,
+                               strength: str = "", strength_score: int = 0,
+                               strength_factors: list = None):
         """Notify when a signal is detected on any symbol."""
         emoji = "🟢" if signal.upper() == "BUY" else "🔴"
         trade_status = "✅ TRADING" if is_active_symbol else "👀 SIGNAL ONLY"
+        
+        # Format strength factors
+        factors_text = ""
+        if strength_factors:
+            factors_text = "\n".join([f"  • {f}" for f in strength_factors[:3]])
         
         msg = f"""
 {emoji} <b>SIGNAL DETECTED</b>
 
 <b>Symbol:</b> {symbol}
 <b>Signal:</b> {signal.upper()} ({signal_type})
+<b>Strength:</b> {strength} ({strength_score}/100)
 <b>Price:</b> {price:.5f}
-<b>RSI:</b> {rsi:.1f}
-<b>ADX:</b> {adx:.1f}
+<b>RSI:</b> {rsi:.1f} | <b>ADX:</b> {adx:.1f}
 <b>Status:</b> {trade_status}
 """
+        if factors_text:
+            msg += f"\n<b>Factors:</b>\n{factors_text}"
+        
         self.send_message(msg.strip())
 
 

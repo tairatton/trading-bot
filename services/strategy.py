@@ -143,10 +143,215 @@ def generate_signals(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
+def calculate_signal_strength(row: pd.Series, signal: str, signal_type: str) -> dict:
+    """
+    Calculate signal strength based on multiple indicators.
+    
+    Factors:
+    1. ADX (trend strength): Higher = stronger for TREND, lower = better for MR
+    2. RSI extremity: More extreme = stronger signal
+    3. Trend alignment: Price vs SMA20/50/200
+    4. Stochastic confirmation
+    5. Bollinger Band position
+    
+    Returns:
+        dict with 'strength' (WEAK/MEDIUM/STRONG), 'score' (0-100), 'factors' list
+    """
+    score = 0
+    factors = []
+    
+    # Get indicator values
+    adx = row.get("ADX", 25)
+    rsi = row.get("RSI", 50)
+    stoch = row.get("Stoch_K", 50)
+    price = row.get("Close", 0)
+    sma20 = row.get("SMA_20", price)
+    sma50 = row.get("SMA_50", price)
+    sma200 = row.get("SMA_200", price)
+    bb_upper = row.get("BB_Upper", price)
+    bb_lower = row.get("BB_Lower", price)
+    di_plus = row.get("DI_Plus", 20)
+    di_minus = row.get("DI_Minus", 20)
+    
+    if signal == "none":
+        return {"strength": "NONE", "score": 0, "factors": []}
+    
+    # ========== TREND FOLLOWING SIGNALS ==========
+    if signal_type == "TREND":
+        # 1. ADX (Trend strength) - Higher is better (max 25 points)
+        if adx >= 30:
+            score += 25
+            factors.append("🔥 Strong trend (ADX≥30)")
+        elif adx >= 25:
+            score += 20
+            factors.append("📈 Good trend (ADX≥25)")
+        elif adx >= 20:
+            score += 15
+            factors.append("📊 Moderate trend")
+        else:
+            score += 5
+            factors.append("⚠️ Weak trend")
+        
+        # 2. DI+ vs DI- alignment (max 20 points)
+        if signal == "buy":
+            if di_plus > di_minus + 10:
+                score += 20
+                factors.append("✅ DI+ >> DI-")
+            elif di_plus > di_minus:
+                score += 10
+                factors.append("👍 DI+ > DI-")
+        else:  # sell
+            if di_minus > di_plus + 10:
+                score += 20
+                factors.append("✅ DI- >> DI+")
+            elif di_minus > di_plus:
+                score += 10
+                factors.append("👍 DI- > DI+")
+        
+        # 3. RSI confirmation (max 20 points)
+        if signal == "buy":
+            if 45 <= rsi <= 55:  # RSI in neutral, good for pullback entry
+                score += 20
+                factors.append("🎯 RSI optimal zone")
+            elif 40 <= rsi <= 60:
+                score += 15
+                factors.append("✓ RSI in range")
+        else:  # sell
+            if 45 <= rsi <= 55:
+                score += 20
+                factors.append("🎯 RSI optimal zone")
+            elif 40 <= rsi <= 60:
+                score += 15
+                factors.append("✓ RSI in range")
+        
+        # 4. Moving Average alignment (max 20 points)
+        if signal == "buy":
+            ma_score = sum([
+                price > sma20,
+                sma20 > sma50,
+                sma50 > sma200,
+                price > sma200
+            ])
+            score += ma_score * 5
+            if ma_score >= 3:
+                factors.append("📊 MA alignment strong")
+        else:  # sell
+            ma_score = sum([
+                price < sma20,
+                sma20 < sma50,
+                sma50 < sma200,
+                price < sma200
+            ])
+            score += ma_score * 5
+            if ma_score >= 3:
+                factors.append("📊 MA alignment strong")
+        
+        # 5. Stochastic confirmation (max 15 points)
+        if signal == "buy" and stoch < 50:
+            score += 15
+            factors.append("✓ Stoch not overbought")
+        elif signal == "sell" and stoch > 50:
+            score += 15
+            factors.append("✓ Stoch not oversold")
+    
+    # ========== MEAN REVERSION SIGNALS ==========
+    elif signal_type == "MR":
+        # 1. ADX (Low = better for MR) (max 25 points)
+        if adx < 20:
+            score += 25
+            factors.append("🎯 Ranging market (ADX<20)")
+        elif adx < 25:
+            score += 20
+            factors.append("👍 Low trend (ADX<25)")
+        elif adx < 30:
+            score += 10
+            factors.append("⚠️ Moderate ADX")
+        
+        # 2. RSI extremity (max 25 points)
+        if signal == "buy":
+            if rsi < 25:
+                score += 25
+                factors.append("🔥 RSI extremely oversold")
+            elif rsi < 30:
+                score += 20
+                factors.append("📉 RSI oversold")
+            elif rsi < 35:
+                score += 15
+                factors.append("✓ RSI low")
+        else:  # sell
+            if rsi > 75:
+                score += 25
+                factors.append("🔥 RSI extremely overbought")
+            elif rsi > 70:
+                score += 20
+                factors.append("📈 RSI overbought")
+            elif rsi > 65:
+                score += 15
+                factors.append("✓ RSI high")
+        
+        # 3. Stochastic extremity (max 20 points)
+        if signal == "buy":
+            if stoch < 15:
+                score += 20
+                factors.append("🎯 Stoch extremely low")
+            elif stoch < 25:
+                score += 15
+                factors.append("✓ Stoch low")
+        else:  # sell
+            if stoch > 85:
+                score += 20
+                factors.append("🎯 Stoch extremely high")
+            elif stoch > 75:
+                score += 15
+                factors.append("✓ Stoch high")
+        
+        # 4. Bollinger Band touch (max 20 points)
+        bb_range = bb_upper - bb_lower if bb_upper > bb_lower else 1
+        if signal == "buy":
+            distance_from_lower = (price - bb_lower) / bb_range
+            if distance_from_lower < 0:  # Below BB lower
+                score += 20
+                factors.append("🔥 Price below BB lower")
+            elif distance_from_lower < 0.1:
+                score += 15
+                factors.append("✓ Price near BB lower")
+        else:  # sell
+            distance_from_upper = (bb_upper - price) / bb_range
+            if distance_from_upper < 0:  # Above BB upper
+                score += 20
+                factors.append("🔥 Price above BB upper")
+            elif distance_from_upper < 0.1:
+                score += 15
+                factors.append("✓ Price near BB upper")
+        
+        # 5. Reversal candle pattern hint (max 10 points)
+        # Simple check: close vs open direction
+        if signal == "buy" and price > row.get("Open", price):
+            score += 10
+            factors.append("🕯️ Bullish candle")
+        elif signal == "sell" and price < row.get("Open", price):
+            score += 10
+            factors.append("🕯️ Bearish candle")
+    
+    # Determine strength level
+    if score >= 70:
+        strength = "STRONG 💪"
+    elif score >= 50:
+        strength = "MEDIUM ⚡"
+    else:
+        strength = "WEAK ⚠️"
+    
+    return {
+        "strength": strength,
+        "score": min(score, 100),
+        "factors": factors[:4]  # Top 4 factors
+    }
+
+
 def get_latest_signal(df: pd.DataFrame) -> dict:
     """Get the latest signal from the dataframe."""
     if df is None or df.empty:
-        return {"signal": "none", "price": 0, "atr": 0}
+        return {"signal": "none", "price": 0, "atr": 0, "strength": "NONE", "strength_score": 0}
     
     row = df.iloc[-1]
     signal = "none"
@@ -165,6 +370,9 @@ def get_latest_signal(df: pd.DataFrame) -> dict:
         signal = "sell"
         signal_type = "MR"
     
+    # Calculate signal strength
+    strength_info = calculate_signal_strength(row, signal, signal_type)
+    
     return {
         "signal": signal,
         "signal_type": signal_type,
@@ -172,7 +380,11 @@ def get_latest_signal(df: pd.DataFrame) -> dict:
         "atr": row.get("ATR", 0),
         "rsi": row.get("RSI", 0),
         "adx": row.get("ADX", 0),
-        "time": df.index[-1]
+        "stoch": row.get("Stoch_K", 0),
+        "time": df.index[-1],
+        "strength": strength_info["strength"],
+        "strength_score": strength_info["score"],
+        "strength_factors": strength_info["factors"]
     }
 
 

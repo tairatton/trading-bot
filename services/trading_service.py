@@ -437,7 +437,10 @@ class TradingService:
                                     price=signal_info["price"],
                                     rsi=signal_info.get("rsi", 0),
                                     adx=signal_info.get("adx", 0),
-                                    is_active_symbol=is_active
+                                    is_active_symbol=is_active,
+                                    strength=signal_info.get("strength", ""),
+                                    strength_score=signal_info.get("strength_score", 0),
+                                    strength_factors=signal_info.get("strength_factors", [])
                                 )
                                 
                                 last_signals[symbol] = signal_key
