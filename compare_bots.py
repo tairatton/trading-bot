@@ -264,11 +264,16 @@ def main():
     colors = [results[n]["color"] for n in names]
     
     # Plot 1: Equity Curves
+    # Plot 1: Equity Curves
     for name, data in results.items():
+        total_ret = data["total_return"]
+        total_profit = data["final_balance"] - INITIAL_BALANCE
+        label_text = f"{name} (+{total_ret:.0f}% | +${total_profit:,.0f})"
+        
         ax1.plot(data["equity_df"]["time"], data["equity_df"]["balance"], 
-                 label=name, linewidth=1.5, color=data["color"])
+                 label=label_text, linewidth=1.5, color=data["color"])
     ax1.set_title('Equity Curves', fontsize=12, fontweight='bold')
-    ax1.legend(loc='upper left')
+    ax1.legend(loc='upper left', fontsize=9)
     ax1.grid(True, alpha=0.3)
     ax1.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: f'${x/1000:.0f}K'))
     
@@ -277,7 +282,7 @@ def main():
         ax2.fill_between(data["dd_df"]["time"], 0, data["dd_df"]["dd"], alpha=0.3, color=data["color"])
         ax2.plot(data["dd_df"]["time"], data["dd_df"]["dd"], label=name, linewidth=1, color=data["color"])
     ax2.set_title('Drawdown (%)', fontsize=12, fontweight='bold')
-    ax2.legend(loc='upper right')
+    ax2.legend(loc='lower right')
     ax2.grid(True, alpha=0.3)
     ax2.invert_yaxis()
     
