@@ -1,9 +1,7 @@
 from datetime import datetime
 from typing import Optional, Dict, Any, List
-import json
-import os
-from pathlib import Path
 from config import settings
+from pathlib import Path
 
 # Try to import MT5 (only works on Windows)
 try:
@@ -16,13 +14,13 @@ except ImportError:
 
 
 class MT5Service:
-    """Service to interact with MetaTrader 5 (Exness) with Multi-Account support."""
+    """Service to interact with MetaTrader 5 (Exness)."""
     
     def __init__(self):
         self.connected = False
         self.account_info = None
-        self.accounts = []  # List of account configs
-        self.current_account = None  # Currently logged in account
+        self.accounts: List[Dict[str, Any]] = []
+        self.current_account: Optional[Dict[str, Any]] = None
         self._load_accounts()
     
     def connect(self) -> bool:
@@ -50,6 +48,12 @@ class MT5Service:
         if authorized:
             self.connected = True
             self.account_info = mt5.account_info()._asdict()
+            self.current_account = {
+                "login": int(settings.MT5_LOGIN),
+                "password": settings.MT5_PASSWORD,
+                "server": settings.MT5_SERVER,
+                "name": str(settings.MT5_LOGIN),
+            }
             print(f"[MT5] Connected to Exness - Account: {settings.MT5_LOGIN}")
             print(f"[MT5] Balance: ${self.account_info['balance']:.2f}")
             return True
@@ -63,87 +67,44 @@ class MT5Service:
         self.connected = False
         self.current_account = None
         print("[MT5] Disconnected")
-    
-    def _load_accounts(self):
-        """Load accounts from accounts.py if exists."""
+
+    def _load_accounts(self) -> None:
+        """Load accounts from root accounts.py if exists."""
         try:
             import sys
-            # Add parent directory to path to find accounts.py
             sys.path.insert(0, str(Path(__file__).parent.parent.parent))
             from accounts import ACCOUNTS_LIST
-            
             if ACCOUNTS_LIST:
                 self.accounts = ACCOUNTS_LIST
                 print(f"[MT5] Loaded {len(self.accounts)} accounts from accounts.py")
         except ImportError:
-            print("[MT5] accounts.py not found or ACCOUNTS_LIST not defined")
+            # Optional; keep single-account mode
+            return
         except Exception as e:
             print(f"[MT5] Error loading accounts: {e}")
-    
-    def login_account(self, account: Dict) -> bool:
-        """Login to a specific account."""
+
+    def login_account(self, account: Dict[str, Any]) -> bool:
+        """Login to a specific account (used for display switching)."""
         if not MT5_AVAILABLE:
             return False
-        
-        # Initialize MT5 if not already
+
         if not mt5.initialize(path=settings.MT5_PATH if settings.MT5_PATH else None):
             print(f"[MT5] Failed to initialize: {mt5.last_error()}")
             return False
-        
-        # Login to the specified account
+
         authorized = mt5.login(
             login=int(account.get("login", 0)),
             password=account.get("password", ""),
-            server=account.get("server", "")
+            server=account.get("server", ""),
         )
-        
+
         if authorized:
             self.connected = True
             self.current_account = account
-            self.account_info = mt5.account_info()._asdict()
-            print(f"[MT5] Logged in: {account.get('name', account.get('login'))}")
+            info = mt5.account_info()
+            self.account_info = info._asdict() if info else None
             return True
-        else:
-            print(f"[MT5] Login failed for {account.get('name')}: {mt5.last_error()}")
-            return False
-    
-    def trade_all_accounts(self, order_type: str, symbol: str, volume: float, 
-                           sl: float = 0, tp: float = 0, comment: str = "") -> List[Dict]:
-        """Execute trade on all configured accounts sequentially."""
-        results = []
-        
-        if not self.accounts:
-            # No multi-account configured, use default
-            result = self.place_order(order_type, symbol, volume, sl, tp, comment)
-            result["account"] = "default"
-            return [result]
-        
-        for account in self.accounts:
-            if account.get("login", 0) == 0:
-                continue  # Skip unconfigured accounts
-            
-            print(f"[MULTI] Trading on {account.get('name', account.get('login'))}...")
-            
-            # Login to this account
-            if self.login_account(account):
-                # Place order
-                result = self.place_order(order_type, symbol, volume, sl, tp, comment)
-                result["account"] = account.get("name", str(account.get("login")))
-                results.append(result)
-                
-                if result.get("success"):
-                    print(f"[MULTI] ✓ Order placed on {result['account']}")
-                else:
-                    print(f"[MULTI] ✗ Failed on {result['account']}: {result.get('error')}")
-            else:
-                results.append({
-                    "success": False,
-                    "account": account.get("name", str(account.get("login"))),
-                    "error": "Login failed"
-                })
-        
-        return results
-
+        return False
     
     def is_connected(self) -> bool:
         """Check if MT5 connection is alive."""
@@ -201,7 +162,188 @@ class MT5Service:
             return {}
         info = mt5.account_info()
         return info._asdict() if info else {}
-    
+
+    def get_account_list(self) -> List[Dict[str, Any]]:
+        """Get list of configured accounts for dropdown."""
+        if self.accounts:
+            return [
+                {"id": str(acc["login"]), "name": acc.get("name", str(acc["login"]))}
+                for acc in self.accounts
+                if acc.get("login", 0)
+            ]
+
+        # Fallback: single configured account from settings
+        if settings.is_mt5_configured():
+            return [{"id": str(settings.MT5_LOGIN), "name": str(settings.MT5_LOGIN)}]
+        return []
+
+    def get_specific_account_info(self, account_id: str) -> Dict[str, Any]:
+        """Get account info for a specific account ID (login), without changing trading logic."""
+        if not MT5_AVAILABLE:
+            return {}
+
+        # Find target
+        target_acc: Optional[Dict[str, Any]] = None
+        for acc in self.accounts:
+            if str(acc.get("login")) == str(account_id):
+                target_acc = acc
+                break
+
+        # If no multi-accounts configured, only allow the settings login
+        if not target_acc:
+            if str(settings.MT5_LOGIN) != str(account_id):
+                return {}
+            target_acc = {
+                "login": int(settings.MT5_LOGIN),
+                "password": settings.MT5_PASSWORD,
+                "server": settings.MT5_SERVER,
+                "name": str(settings.MT5_LOGIN),
+            }
+
+        original_account = self.current_account
+        result: Dict[str, Any] = {}
+
+        try:
+            if mt5.login(
+                login=int(target_acc["login"]),
+                password=target_acc.get("password", ""),
+                server=target_acc.get("server", ""),
+            ):
+                info = mt5.account_info()
+                if info:
+                    result = {
+                        "balance": info.balance,
+                        "equity": info.equity,
+                        "profit": info.profit,
+                        "currency": getattr(info, "currency", "USD"),
+                        "account_count": 1,
+                    }
+        except Exception as e:
+            print(f"[MT5] Error fetching account info for {target_acc.get('name')}: {e}")
+        finally:
+            if original_account:
+                try:
+                    self.login_account(original_account)
+                except Exception:
+                    pass
+
+        return result
+
+    def get_display_positions(self, account_id: Optional[str] = None) -> List[Dict[str, Any]]:
+        """Get positions for display for selected account_id; default is current logged-in account."""
+        if not self.connected:
+            return []
+
+        # Default: current login
+        if not account_id:
+            positions = mt5.positions_get()
+            return [p._asdict() for p in positions] if positions else []
+
+        # Switch temporarily
+        original_account = self.current_account
+        target_acc: Optional[Dict[str, Any]] = None
+        for acc in self.accounts:
+            if str(acc.get("login")) == str(account_id):
+                target_acc = acc
+                break
+
+        if not target_acc:
+            # Single-account fallback
+            if str(settings.MT5_LOGIN) != str(account_id):
+                return []
+            target_acc = {
+                "login": int(settings.MT5_LOGIN),
+                "password": settings.MT5_PASSWORD,
+                "server": settings.MT5_SERVER,
+                "name": str(settings.MT5_LOGIN),
+            }
+
+        try:
+            if mt5.login(
+                login=int(target_acc["login"]),
+                password=target_acc.get("password", ""),
+                server=target_acc.get("server", ""),
+            ):
+                positions = mt5.positions_get()
+                return [p._asdict() for p in positions] if positions else []
+        except Exception as e:
+            print(f"[MT5] Error fetching positions for {target_acc.get('name')}: {e}")
+            return []
+        finally:
+            if original_account:
+                try:
+                    self.login_account(original_account)
+                except Exception:
+                    pass
+
+        return []
+
+    def _resolve_account(self, account_id: str) -> Optional[Dict[str, Any]]:
+        """Resolve account config by login id, supporting both accounts.py and single .env account."""
+        for acc in self.accounts:
+            if str(acc.get("login")) == str(account_id):
+                return acc
+
+        if settings.is_mt5_configured() and str(settings.MT5_LOGIN) == str(account_id):
+            return {
+                "login": int(settings.MT5_LOGIN),
+                "password": settings.MT5_PASSWORD,
+                "server": settings.MT5_SERVER,
+                "name": str(settings.MT5_LOGIN),
+            }
+
+        return None
+
+    def close_position_for_account(self, account_id: str, position_id: int) -> Dict[str, Any]:
+        """Close a position on a specific account (used by dashboard switching)."""
+        if not self.connected:
+            return {"success": False, "error": "MT5 not connected"}
+
+        target_acc = self._resolve_account(account_id)
+        if not target_acc:
+            return {"success": False, "error": "Account not found"}
+
+        original_account = self.current_account
+        try:
+            if mt5.login(
+                login=int(target_acc["login"]),
+                password=target_acc.get("password", ""),
+                server=target_acc.get("server", ""),
+            ):
+                return self.close_position(position_id)
+            return {"success": False, "error": "Login failed"}
+        finally:
+            if original_account:
+                try:
+                    self.login_account(original_account)
+                except Exception:
+                    pass
+
+    def get_history_deals_for_account(self, account_id: str, days: int = 7) -> List[Dict]:
+        """Get closed deals for a specific account (used by dashboard switching)."""
+        if not self.connected:
+            return []
+
+        target_acc = self._resolve_account(account_id)
+        if not target_acc:
+            return []
+
+        original_account = self.current_account
+        try:
+            if mt5.login(
+                login=int(target_acc["login"]),
+                password=target_acc.get("password", ""),
+                server=target_acc.get("server", ""),
+            ):
+                return self.get_history_deals(days=days)
+            return []
+        finally:
+            if original_account:
+                try:
+                    self.login_account(original_account)
+                except Exception:
+                    pass
+
     def get_symbol_info(self, symbol: str = None) -> Dict[str, Any]:
         """Get symbol information."""
         symbol = symbol or settings.SYMBOL

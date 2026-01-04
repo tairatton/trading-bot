@@ -22,7 +22,7 @@ CONFIGS = {
     },
     "Prop Firm Bot": {
         "symbols": ["EURUSDm", "USDCADm", "USDJPYm"],
-        "risk": 0.0015,
+        "risk": 0.0018,
         "params": {
             "TREND": {"SL_ATR": 1.2, "TP_ATR": 3.0, "TRAIL_START": 1.0, "TRAIL_DIST": 0.7, "MAX_BARS": 50},
             "MR": {"SL_ATR": 0.8, "TP_ATR": 2.0, "TRAIL_START": 0.7, "TRAIL_DIST": 0.5, "MAX_BARS": 25}

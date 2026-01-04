@@ -24,10 +24,10 @@ wheels/
 venv/
 .venv/
 env/
-.env
+# .env  # Commented out to allow local access
 
 # Environement Variables (CRITICAL)
-.env
+# .env  # Commented out to allow local access
 
 # IDE
 .idea/

@@ -28,10 +28,10 @@ from services.strategy import calculate_indicators, generate_signals
 # PROP FIRM CONFIGURATION
 SYMBOLS = ["EURUSDm", "USDCADm", "USDJPYm"]  # 3 symbols like original
 INITIAL_BALANCE = 10000.0  # $10,000 account
-RISK_PER_TRADE = 0.0015  # 0.15% per trade (0.45% total when all open)
+RISK_PER_TRADE = 0.0018  # 0.18% per trade (0.54% total when all open)
 
 # PROP FIRM LIMITS
-DAILY_LOSS_LIMIT = 0.04  # 4% daily stop (buffer below 5% limit)
+DAILY_LOSS_LIMIT = 0.041  # 4.1% daily stop (buffer below 5% limit)
 MAX_LOSS_ABSOLUTE = 1000  # $1000 max loss limit
 
 # Aggressive trailing for faster profits
@@ -336,7 +336,48 @@ def run_propfirm_backtest():
     
     print("=" * 80)
     
-    # Results displayed above (no CSV output)
+    # Save equity curve for plotting
+    equity_df = pd.DataFrame(equity_curve)
+    csv_path = os.path.join(os.path.dirname(__file__), "propfirm_equity_curve.csv")
+    equity_df.to_csv(csv_path, index=False)
+    print(f"\n[*] Equity curve saved: {csv_path}")
+    
+    # Generate plot
+    try:
+        import matplotlib.pyplot as plt
+        import matplotlib.dates as mdates
+        
+        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(14, 8))
+        fig.suptitle(f'Prop Firm Backtest - Risk {RISK_PER_TRADE*100}% | Monthly Return: {monthly_return:.1f}%', fontsize=14, fontweight='bold')
+        
+        # Equity Curve
+        ax1.plot(equity_df['time'], equity_df['balance'], linewidth=1.5, color='#2ecc71')
+        ax1.axhline(y=INITIAL_BALANCE, color='blue', linestyle='--', alpha=0.5, label=f'Initial: ${INITIAL_BALANCE:,.0f}')
+        ax1.set_ylabel('Balance ($)')
+        ax1.set_title('Equity Curve')
+        ax1.grid(True, alpha=0.3)
+        ax1.legend()
+        ax1.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: f'${x:,.0f}'))
+        
+        # Drawdown
+        equity_df['peak'] = equity_df['balance'].cummax()
+        equity_df['drawdown'] = (equity_df['peak'] - equity_df['balance']) / equity_df['peak'] * 100
+        ax2.fill_between(equity_df['time'], 0, equity_df['drawdown'], alpha=0.4, color='red')
+        ax2.axhline(y=max_drawdown, color='orange', linestyle=':', label=f'Max DD: {max_drawdown:.1f}%')
+        ax2.set_ylabel('Drawdown (%)')
+        ax2.set_xlabel('Date')
+        ax2.set_title('Drawdown')
+        ax2.grid(True, alpha=0.3)
+        ax2.legend()
+        ax2.invert_yaxis()
+        
+        plt.tight_layout()
+        chart_path = os.path.join(os.path.dirname(__file__), "propfirm_backtest_chart.png")
+        plt.savefig(chart_path, dpi=150, bbox_inches='tight')
+        print(f"[*] Chart saved: {chart_path}")
+        plt.show()
+    except Exception as e:
+        print(f"[!] Plot error: {e}")
 
 
 if __name__ == "__main__":

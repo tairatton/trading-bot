@@ -3,10 +3,12 @@ import threading
 import time
 import logging
 import os
+import json
 from datetime import datetime
 from typing import Optional, List, Dict, Any
 import pandas as pd
 from config import settings
+from services.strategy import STRATEGY_PARAMS
 from services.telegram_service import telegram_service
 
 # Setup file logging
@@ -55,33 +57,24 @@ class TradingService:
         # Time exit setting (hours) - different from backtest for faster exits
         self.max_hours_in_trade: float = 10.0  # 10 hours timeout
         
-        # Multi-symbol position tracking {symbol: {...}}
-        self.positions_tracking: Dict[str, Dict] = {}
+        # Position tracking for trailing stop/time exit (single account)
+        self.positions_tracking: Dict[int, Dict[str, Any]] = {}
         
         # Error tracking for browser notification
         self.last_error: Optional[str] = None
         
-        # News events (UTC times)
-        self.high_impact_news = [
-            "2025-01-10 13:30", "2025-02-07 13:30", "2025-03-07 13:30",
-            "2025-04-04 13:30", "2025-05-02 13:30", "2025-06-06 13:30",
-            "2025-07-03 13:30", "2025-08-01 13:30", "2025-09-05 13:30",
-            "2025-10-03 13:30", "2025-11-07 13:30", "2025-12-05 13:30",
-            "2025-01-29 19:00", "2025-03-19 18:00", "2025-05-07 18:00",
-            "2025-06-18 18:00", "2025-07-30 18:00", "2025-09-17 18:00",
-        ]
+        # Daily Loss Protection for Prop Firm (The 5%ers: 5% daily limit)
+        self.DAILY_LOSS_LIMIT: float = 4.1  # Stop trading if daily loss exceeds 4.1%
+        self.daily_starting_balance: float = 0  # Track starting balance of the day
+        self.last_daily_reset: Optional[datetime] = None
+        
+        # Persistence file for daily state (survives restarts)
+        self.DAILY_STATE_FILE: str = os.path.join(log_dir, "daily_state.json")
+        self._load_daily_state()
+        
+        # News filter removed - using spread filter instead
     
-    def is_news_time(self, current_time: datetime) -> bool:
-        """Check if during news blackout."""
-        for news_str in self.high_impact_news:
-            try:
-                news_time = pd.to_datetime(news_str)
-                time_diff = abs((current_time - news_time).total_seconds() / 60)
-                if time_diff <= settings.NEWS_BLACKOUT_MINUTES:
-                    return True
-            except:
-                pass
-        return False
+
     
     def is_session_time(self, current_time: datetime) -> bool:
         """Check if within trading session."""
@@ -91,14 +84,9 @@ class TradingService:
         return settings.SESSION_START_UTC <= hour_utc < settings.SESSION_END_UTC
     
     def can_trade(self, current_time: datetime) -> tuple:
-        """Check if trading is allowed.
-        
-        Note: Session filter disabled for 24-hour trading.
-        Backtest showed 24h trading has higher returns (+3125% vs +2747%).
-        """
-        if self.is_news_time(current_time):
-            return False, "News blackout"
-        # Session filter disabled - trade 24 hours
+        """Check if trading is allowed. Using spread filter instead of news filter."""
+        # News filter removed - spread filter handles volatility
+        # Session filter disabled - trade 24 hours (higher returns in backtest)
         return True, "OK"
     
     def get_last_error(self) -> Optional[str]:
@@ -107,10 +95,85 @@ class TradingService:
         self.last_error = None  # Clear after reading
         return error
     
+    def _load_daily_state(self) -> None:
+        """Load daily state from JSON file (for restart persistence)."""
+        try:
+            if os.path.exists(self.DAILY_STATE_FILE):
+                with open(self.DAILY_STATE_FILE, 'r') as f:
+                    state = json.load(f)
+                    saved_date = state.get("date", "")
+                    today = datetime.utcnow().strftime("%Y-%m-%d")
+                    
+                    if saved_date == today:
+                        self.daily_starting_balance = state.get("starting_balance", 0)
+                        self.last_daily_reset = datetime.fromisoformat(state.get("reset_time", datetime.utcnow().isoformat()))
+                        logger.info(f"[DAILY] Restored state from file - Balance: ${self.daily_starting_balance:.2f}")
+                    else:
+                        logger.info(f"[DAILY] State file is from {saved_date}, ignoring (new day)")
+        except Exception as e:
+            logger.warning(f"[DAILY] Failed to load state: {e}")
+    
+    def _save_daily_state(self) -> None:
+        """Save daily state to JSON file."""
+        try:
+            state = {
+                "date": datetime.utcnow().strftime("%Y-%m-%d"),
+                "starting_balance": self.daily_starting_balance,
+                "reset_time": self.last_daily_reset.isoformat() if self.last_daily_reset else datetime.utcnow().isoformat()
+            }
+            with open(self.DAILY_STATE_FILE, 'w') as f:
+                json.dump(state, f)
+        except Exception as e:
+            logger.warning(f"[DAILY] Failed to save state: {e}")
+    
+    def is_weekend_close_time(self) -> bool:
+        """Check if it's time to close all positions before weekend."""
+        if not settings.CLOSE_ON_FRIDAY:
+            return False
+        
+        now = datetime.utcnow()
+        # Friday = weekday 4
+        if now.weekday() == 4 and now.hour >= settings.FRIDAY_CLOSE_HOUR_UTC:
+            return True
+        # Saturday or Sunday should not have positions
+        if now.weekday() >= 5:
+            return True
+        return False
+    
+    def check_daily_loss(self, mt5_service) -> tuple:
+        """Check if daily loss limit has been reached.
+        
+        Returns:
+            (can_trade: bool, daily_loss_pct: float, message: str)
+        """
+        account = mt5_service.get_account_info()
+        current_balance = account.get("balance", 0)
+        current_equity = account.get("equity", current_balance)
+        
+        # Reset daily tracking at start of new day (UTC)
+        now = datetime.utcnow()
+        if self.last_daily_reset is None or self.last_daily_reset.date() != now.date():
+            self.daily_starting_balance = current_balance
+            self.last_daily_reset = now
+            self._save_daily_state()  # Persist to file
+            logger.info(f"[DAILY] New day started - Balance: ${current_balance:.2f}")
+        
+        if self.daily_starting_balance <= 0:
+            return True, 0, "OK"
+        
+        # Calculate daily loss (use equity to include unrealized P&L)
+        daily_loss = self.daily_starting_balance - current_equity
+        daily_loss_pct = (daily_loss / self.daily_starting_balance) * 100
+        
+        if daily_loss_pct >= self.DAILY_LOSS_LIMIT:
+            return False, daily_loss_pct, f"Daily loss {daily_loss_pct:.2f}% >= {self.DAILY_LOSS_LIMIT}%"
+        
+        return True, daily_loss_pct, "OK"
+    
     def calculate_position_size(self, balance: float, atr: float, signal_type: str) -> float:
         """Calculate position size based on risk."""
         risk_amount = balance * (settings.RISK_PERCENT / 100)
-        sl_atr = settings.PARAMS[signal_type]["SL_ATR"]
+        sl_atr = STRATEGY_PARAMS[signal_type]["SL_ATR"]
         sl_distance = atr * sl_atr
         
         if sl_distance <= 0:
@@ -128,7 +191,7 @@ class TradingService:
         lots = max(0.01, round(lots, 2))
         return lots
     
-    def process_signal(self, mt5_service, data_service, signal_info: Dict, symbol: str) -> Dict:
+    def process_signal(self, mt5_service, data_service, signal_info: Dict, symbol: str, account_name: str = "") -> Dict:
         """Process a trading signal and place order if conditions met."""
         signal = signal_info.get("signal")
         signal_type = signal_info.get("signal_type")
@@ -147,6 +210,14 @@ class TradingService:
         if not can:
             self.stats["last_action"] = f"Skipped: {reason}"
             return {"action": "skip", "reason": reason}
+        
+        # Check Daily Loss Protection
+        can_trade_daily, daily_loss_pct, daily_msg = self.check_daily_loss(mt5_service)
+        if not can_trade_daily:
+            logger.warning(f"[DAILY LOSS] LIMIT REACHED: {daily_msg}")
+            self.stats["last_action"] = f"STOPPED: Daily Loss {daily_loss_pct:.1f}%"
+            telegram_service.notify_error(f"⚠️ DAILY LOSS LIMIT: {daily_loss_pct:.2f}% - Trading paused")
+            return {"action": "skip", "reason": daily_msg}
         
         # Check if already have position for THIS symbol
         positions = mt5_service.get_open_positions(symbol=symbol)
@@ -184,7 +255,7 @@ class TradingService:
         lots = self.calculate_position_size(balance, atr, signal_type)
         
         # Calculate SL/TP
-        params = settings.PARAMS[signal_type]
+        params = STRATEGY_PARAMS[signal_type]
         sl_distance = atr * params["SL_ATR"]
         tp_distance = atr * params["TP_ATR"]
         
@@ -229,7 +300,8 @@ class TradingService:
                 lots=lots,
                 sl=sl,
                 tp=tp,
-                signal_type=signal_type
+                signal_type=signal_type,
+                account_name=account_name
             )
             
             return {"action": "opened", "result": result}
@@ -244,110 +316,90 @@ class TradingService:
             
             return {"action": "failed", "error": error_msg}
     
-    def monitor_all_accounts(self, mt5_service, data_service) -> None:
-        """Monitor open positions for ALL accounts."""
+    def monitor_positions(self, mt5_service, data_service) -> None:
+        """Monitor open positions for current account (single account)."""
         from services.strategy import STRATEGY_PARAMS
-        
-        # Get list of accounts
-        accounts = mt5_service.accounts
-        if not accounts:
-            logger.warning("No accounts configured for monitoring.")
+
+        positions = mt5_service.get_open_positions()
+        if not positions:
+            self.positions_tracking = {}
             return
 
-        for acc in accounts:
+        live_tickets = set()
+        for pos in positions:
             try:
-                # Login to account
-                if not mt5_service.login_account(acc):
-                    logger.error(f"[MONITOR] Failed to login to {acc['name']}")
-                    continue
-                
-                # Get Account ID
-                acc_id = str(acc['login'])
-                
-                # Initialize tracking for this account if needed
-                if acc_id not in self.positions_tracking:
-                    self.positions_tracking[acc_id] = {}
-                
-                # Get Open Positions
-                positions = mt5_service.get_open_positions()
-                
-                # If no positions, clear tracking for this account
-                if not positions:
-                    self.positions_tracking[acc_id] = {}
-                    continue
-                
-                # Check each position
-                for pos in positions:
-                    ticket = pos["ticket"]
-                    pos_symbol = pos.get("symbol", settings.SYMBOL)
-                    pos_type = "buy" if pos["type"] == 0 else "sell"
-                    entry_price = pos["price_open"]
-                    current_sl = pos["sl"]
-                    
-                    # Track Position Details
-                    if ticket not in self.positions_tracking[acc_id]:
-                        # Infer signal type from comment
-                        comment = pos.get("comment", "")
-                        signal_type = "MR" if "MR" in comment else "TREND"
-                        
-                        self.positions_tracking[acc_id][ticket] = {
-                            "entry_price": entry_price,
-                            "highest": entry_price if pos_type == "buy" else 0,
-                            "lowest": entry_price if pos_type == "sell" else float('inf'),
-                            "entry_time": datetime.now(), # Approximate if just started
-                            "signal_type": signal_type,
-                            "type": pos_type
-                        }
-                    
-                    track_info = self.positions_tracking[acc_id][ticket]
-                    
-                    # Logic: Trailing Stop & Time Exit
-                    # Get Current Price
-                    price_info = mt5_service.get_current_price(pos_symbol)
-                    if not price_info: continue
-                    
-                    current_price = price_info["bid"] if pos_type == "buy" else price_info["ask"]
-                    
-                    # Update High/Low
-                    if pos_type == "buy":
-                        track_info["highest"] = max(track_info["highest"], current_price)
-                    else:
-                        track_info["lowest"] = min(track_info["lowest"], current_price)
-                    
-                    # Get ATR
-                    df = data_service.fetch_data_from_mt5(mt5_service, symbol=pos_symbol, count=50)
-                    if df.empty: continue
-                    df = data_service.calculate_indicators(df)
-                    current_atr = df.iloc[-1]["ATR"]
-                    
-                    # Check Trailing
-                    params = STRATEGY_PARAMS.get(track_info["signal_type"], STRATEGY_PARAMS["TREND"])
-                    
-                    new_sl = None
-                    if pos_type == "buy":
-                        profit = track_info["highest"] - track_info["entry_price"]
-                        if profit >= params["TRAIL_START"] * current_atr:
-                            new_sl = track_info["highest"] - params["TRAIL_DIST"] * current_atr
-                            if new_sl > current_sl:
-                                mt5_service.modify_position_sl_tp(ticket, sl=new_sl)
-                                logger.info(f"[{acc['name']}] TRAILING BUY: {current_sl} -> {new_sl}")
-                    
-                    elif pos_type == "sell":
-                        profit = track_info["entry_price"] - track_info["lowest"]
-                        if profit >= params["TRAIL_START"] * current_atr:
-                            new_sl = track_info["lowest"] + params["TRAIL_DIST"] * current_atr
-                            if new_sl < current_sl or current_sl == 0:
-                                mt5_service.modify_position_sl_tp(ticket, sl=new_sl)
-                                logger.info(f"[{acc['name']}] TRAILING SELL: {current_sl} -> {new_sl}")
-                                
-                    # Time Exit Logic (Simplified for brevity)
-                    hours_held = (datetime.now() - track_info["entry_time"]).total_seconds() / 3600
-                    if hours_held > 10.0: # 10 Hours Max
-                        mt5_service.close_position(ticket)
-                        logger.info(f"[{acc['name']}] TIME EXIT: Held {hours_held:.1f} hours")
+                ticket = pos["ticket"]
+                live_tickets.add(ticket)
+                pos_symbol = pos.get("symbol", settings.SYMBOL)
+                pos_type = "buy" if pos["type"] == 0 else "sell"
+                entry_price = pos["price_open"]
+                current_sl = pos.get("sl", 0)
 
+                if ticket not in self.positions_tracking:
+                    comment = pos.get("comment", "")
+                    signal_type = "MR" if "MR" in comment else "TREND"
+                    
+                    # Use MT5 position time instead of datetime.now()
+                    pos_time = pos.get("time", 0)
+                    if pos_time > 0:
+                        entry_time = datetime.fromtimestamp(pos_time)
+                    else:
+                        entry_time = datetime.now()  # Fallback
+                    
+                    self.positions_tracking[ticket] = {
+                        "entry_price": entry_price,
+                        "highest": entry_price if pos_type == "buy" else 0,
+                        "lowest": entry_price if pos_type == "sell" else float('inf'),
+                        "entry_time": entry_time,
+                        "signal_type": signal_type,
+                        "type": pos_type,
+                    }
+
+                track_info = self.positions_tracking[ticket]
+
+                price_info = mt5_service.get_current_price(pos_symbol)
+                if not price_info:
+                    continue
+
+                current_price = price_info["bid"] if pos_type == "buy" else price_info["ask"]
+
+                if pos_type == "buy":
+                    track_info["highest"] = max(track_info["highest"], current_price)
+                else:
+                    track_info["lowest"] = min(track_info["lowest"], current_price)
+
+                df = data_service.fetch_data_from_mt5(mt5_service, symbol=pos_symbol, count=50)
+                if df.empty:
+                    continue
+                df = data_service.calculate_indicators(df)
+                current_atr = df.iloc[-1]["ATR"]
+
+                params = STRATEGY_PARAMS.get(track_info["signal_type"], STRATEGY_PARAMS["TREND"])
+
+                if pos_type == "buy":
+                    profit = track_info["highest"] - track_info["entry_price"]
+                    if profit >= params["TRAIL_START"] * current_atr:
+                        new_sl = track_info["highest"] - params["TRAIL_DIST"] * current_atr
+                        if new_sl > current_sl:
+                            mt5_service.modify_position_sl_tp(ticket, sl=new_sl)
+                            logger.info(f"TRAILING BUY: {current_sl} -> {new_sl}")
+                else:
+                    profit = track_info["entry_price"] - track_info["lowest"]
+                    if profit >= params["TRAIL_START"] * current_atr:
+                        new_sl = track_info["lowest"] + params["TRAIL_DIST"] * current_atr
+                        if new_sl < current_sl or current_sl == 0:
+                            mt5_service.modify_position_sl_tp(ticket, sl=new_sl)
+                            logger.info(f"TRAILING SELL: {current_sl} -> {new_sl}")
+
+                hours_held = (datetime.now() - track_info["entry_time"]).total_seconds() / 3600
+                if hours_held > 10.0:
+                    mt5_service.close_position(ticket)
+                    logger.info(f"TIME EXIT: Held {hours_held:.1f} hours")
             except Exception as e:
-                logger.error(f"[MONITOR] Error on {acc.get('name')}: {e}")
+                logger.error(f"[MONITOR] Error: {e}")
+
+        # Keep only live tickets
+        self.positions_tracking = {t: info for t, info in self.positions_tracking.items() if t in live_tickets}
 
 
     
@@ -373,50 +425,26 @@ class TradingService:
                     continue
 
                 # =========================================================
-                # WEEKEND SAFETY MODE (Friday Force Close)
+                # WEEKEND SAFETY MODE (Close positions before weekend)
                 # =========================================================
-                # =========================================================
-                # WEEKEND SAFETY MODE (Friday Force Close)
-                # =========================================================
-                if settings.CLOSE_ON_FRIDAY and datetime.utcnow().weekday() == 4:
-                    if datetime.utcnow().hour >= settings.FRIDAY_CLOSE_HOUR_UTC:
-                        logger.warning("[WEEKEND] Cut-off time reached! Closing ALL positions to sleep well 😴")
-                        
-                        total_closed = 0
-                        
-                        # Loop through ALL accounts to close positions
-                        for acc in mt5_service.accounts:
-                            try:
-                                if not mt5_service.login_account(acc):
-                                    logger.error(f"[WEEKEND] Failed to login {acc['name']} for closing")
-                                    continue
-                                    
-                                positions = mt5_service.get_open_positions()
-                                if positions:
-                                    res = mt5_service.close_all_positions()
-                                    if res["closed"] > 0:
-                                        total_closed += res["closed"]
-                                        logger.info(f"[WEEKEND] Closed {res['closed']} positions on {acc['name']}")
-                            except Exception as e:
-                                logger.error(f"[WEEKEND] Error on {acc['name']}: {e}")
-                                
-                        if total_closed > 0:
-                            msg = f"🛑 <b>WEEKEND FORCE CLOSE</b>\n\nClosed {total_closed} positions across all accounts.\nSee you next week! 👋"
-                            telegram_service.send_message(msg)
-                        
-                        # Wait and skip trading scan
-                        logger.info("[WEEKEND] Standing by until Monday...")
-                        time.sleep(300) # Sleep 5 minutes
-                        continue
+                if self.is_weekend_close_time():
+                    logger.warning("[WEEKEND] Cut-off time reached! Closing ALL positions to sleep well 😴")
+
+                    res = mt5_service.close_all_positions()
+                    total_closed = int(res.get("closed", 0))
+                            
+                    if total_closed > 0:
+                        msg = f"🛑 <b>WEEKEND FORCE CLOSE</b>\n\nClosed {total_closed} positions.\nSee you next week! 👋"
+                        telegram_service.send_message(msg)
+                    
+                    # Wait and skip trading scan
+                    logger.info("[WEEKEND] Standing by until Monday...")
+                    time.sleep(300)  # Sleep 5 minutes
+                    continue
                 # =========================================================
                 
-                # Monitor ALL accounts (Loop Login -> Check -> Logout)
-                self.monitor_all_accounts(mt5_service, data_service)
-                
-                # Scan ALL symbols for signals (Just need to login to one account to fetch data)
-                # Ensure we are connected to at least one account for data fetching
-                if not mt5_service.is_connected():
-                    mt5_service.login_account(mt5_service.accounts[0])
+                # Monitor positions (single account)
+                self.monitor_positions(mt5_service, data_service)
                 
                 for symbol in settings.AVAILABLE_SYMBOLS:
                     try:
@@ -458,69 +486,14 @@ class TradingService:
                             # Trade if ACTIVE (Multi-Account Execution)
                             if symbol in settings.ACTIVE_SYMBOLS:
                                 print(f"[{symbol}] TRADING SIGNAL: {signal_info['signal'].upper()}")
-                                
-                                # Loop through all accounts to place trades
-                                for acc in mt5_service.accounts:
-                                    try:
-                                        # Login
-                                        if not mt5_service.login_account(acc):
-                                            logger.error(f"Failed to login {acc['name']} for trading")
-                                            continue
-                                            
-                                        # Get fresh balance for THIS account
-                                        acc_info = mt5_service.get_account_info()
-                                        balance = acc_info.get("balance", 0)
-                                        
-                                        # Calculate Position Size based on THIS account's balance
-                                        atr = signal_info["atr"]
-                                        signal_type = signal_info["signal_type"]
-                                        lots = self.calculate_position_size(balance, atr, signal_type)
-                                        
-                                        # Calculate SL/TP
-                                        price = signal_info["price"]
-                                        params = settings.PARAMS[signal_type]
-                                        sl_dist = atr * params["SL_ATR"]
-                                        tp_dist = atr * params["TP_ATR"]
-                                        
-                                        if signal_info["signal"] == "buy":
-                                            sl = price - sl_dist
-                                            tp = price + tp_dist
-                                        else:
-                                            sl = price + sl_dist
-                                            tp = price - tp_dist
-                                            
-                                        # Place Order for THIS account
-                                        logger.info(f"[{acc['name']}] Placing {signal_info['signal']} {lots} lots")
-                                        result = mt5_service.place_order(
-                                            order_type=signal_info["signal"],
-                                            symbol=symbol,
-                                            volume=lots,
-                                            sl=sl,
-                                            tp=tp,
-                                            comment=f"Bot_{signal_type}"
-                                        )
-                                        
-                                        if result.get("success"):
-                                            logger.info(f"[{acc['name']}] Order SUCCESS: #{result.get('order_id')}")
-                                            
-                                            # Send Individual Telegram Notification
-                                            telegram_service.notify_trade_opened(
-                                                symbol=symbol,
-                                                trade_type=signal_info["signal"],
-                                                price=result.get("price", price),
-                                                lots=lots,
-                                                sl=sl,
-                                                tp=tp,
-                                                signal_type=signal_type,
-                                                account_name=acc['name']
-                                            )
-                                        else:
-                                            logger.error(f"[{acc['name']}] Order FAILED: {result.get('error')}")
-                                            
-                                    except Exception as e:
-                                        logger.error(f"[{acc['name']}] Trade Error: {e}")
-                                
-                                self.stats["last_action"] = f"Executed {signal_info['signal']} on {len(mt5_service.accounts)} accs"
+                                trade_result = self.process_signal(mt5_service, data_service, signal_info, symbol)
+
+                                if trade_result.get("action") == "opened":
+                                    self.stats["last_action"] = f"OPENED {signal_info['signal'].upper()} ({symbol})"
+                                elif trade_result.get("action") == "failed":
+                                    self.stats["last_action"] = f"FAILED: {trade_result.get('error', 'Unknown error')}"
+                                else:
+                                    self.stats["last_action"] = f"{trade_result.get('action', 'none')}: {trade_result.get('reason', '')}".strip(": ")
                                 
                         else:
                             last_signals[symbol] = None

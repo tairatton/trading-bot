@@ -42,6 +42,10 @@ async def dashboard(request: Request):
             "risk_percent": settings.RISK_PERCENT,
             "available_symbols": settings.AVAILABLE_SYMBOLS,
             "active_symbol": settings.SYMBOL,
+            "bot_name": settings.BOT_NAME,
+            "bot_type": settings.BOT_TYPE,
+            "bot_badge_color": "#ff6b35" if settings.BOT_TYPE == "PROP_FIRM" else "#00d4ff",
+            "enable_signal_alerts": settings.ENABLE_SIGNAL_ALERTS,
         },
         "mt5_connected": mt5_service.connected
     })
@@ -72,10 +76,10 @@ async def disconnect_mt5():
 
 @app.get("/api/positions")
 async def get_positions():
-    """Get open MT5 positions."""
+    """Get open MT5 positions (single account)."""
     if not mt5_service.connected:
         return JSONResponse({"positions": []})
-    positions = mt5_service.get_open_positions()
+    positions = mt5_service.get_display_positions("")
     return JSONResponse({"positions": positions})
 
 
@@ -169,57 +173,22 @@ async def get_history():
 
 @app.get("/api/status")
 async def get_status():
-    """Get bot status."""
-    try:
-        account = {}
-        price = {}
-        open_pnl = 0.0
-        
-        if mt5_service.connected:
-            account = mt5_service.get_account_info()
-            price_data = mt5_service.get_current_price()
-            # Convert datetime to string for JSON
-            if price_data and 'time' in price_data:
-                price_data['time'] = price_data['time'].isoformat() if hasattr(price_data['time'], 'isoformat') else str(price_data['time'])
-            price = price_data
-            
-            # Calculate Open P/L from ALL open positions (not just selected symbol)
-            all_positions = mt5_service.get_open_positions(symbol=None)  # Get all
-            open_pnl = sum(pos.get('profit', 0) for pos in all_positions)
-        
-        # Calculate total P/L from closed deals (all time)
-        total_closed_pnl = 0
-        if mt5_service.connected:
-            deals = mt5_service.get_history_deals(days=365)  # Get 1 year history
-            total_closed_pnl = sum(d.get('profit', 0) for d in deals)
-        
-        return JSONResponse({
-            "bot": trading_service.get_status(),
-            "account": account,
-            "price": price,
-            "mt5_connected": mt5_service.connected,
-            "account_count": len(mt5_service.accounts) if mt5_service.accounts else 1,
-            "open_pnl": open_pnl,  # New: calculated from all positions
-            "today_pnl": total_closed_pnl,
-            "timestamp": datetime.now().isoformat()
-        })
-    except Exception as e:
-        return JSONResponse({
-            "error": str(e),
-            "mt5_connected": mt5_service.connected,
-            "account_count": len(mt5_service.accounts) if mt5_service.accounts else 1,
-            "timestamp": datetime.now().isoformat()
-        })
+    """Get bot status and MT5 account info (single account)."""
+    status = trading_service.get_status()
+    mt5_info = mt5_service.get_account_info() if mt5_service.connected else {}
 
-
-@app.get("/api/positions")
-async def get_positions():
-    """Get open positions."""
-    if not mt5_service.connected:
-        return JSONResponse({"positions": []})
-    
-    positions = mt5_service.get_open_positions()
-    return JSONResponse({"positions": positions})
+    return {
+        "bot_status": "running" if status["running"] else "paused" if status["paused"] else "stopped",
+        "account": {
+            "balance": mt5_info.get("balance", 0),
+            "equity": mt5_info.get("equity", 0),
+            "profit": mt5_info.get("profit", 0),
+            "currency": mt5_info.get("currency", "USD"),
+        },
+        "stats": status["stats"],
+        "trade_history": status["trade_history"],
+        "account_count": 1 if mt5_service.connected else 0,
+    }
 
 
 @app.post("/api/settings")

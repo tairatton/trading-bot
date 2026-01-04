@@ -10,6 +10,10 @@ load_dotenv(env_path)
 class Settings:
     """Application settings from environment."""
     
+    # Bot Identification
+    BOT_NAME: str = "Original Bot"
+    BOT_TYPE: str = "ORIGINAL"  # PROP_FIRM or ORIGINAL
+    
     # MT5 Connection (Loaded from accounts.py)
     try:
         import sys
@@ -48,23 +52,9 @@ class Settings:
     CLOSE_ON_FRIDAY: bool = os.getenv('CLOSE_ON_FRIDAY', 'true').lower() == 'true'
     FRIDAY_CLOSE_HOUR_UTC: int = int(os.getenv('FRIDAY_CLOSE_HOUR_UTC', '21'))  # 21:00 UTC = 04:00 TH (Sat)
     
-    # Strategy Parameters (Configurable via .env)
-    PARAMS = {
-        "TREND": {
-            "SL_ATR": float(os.getenv('TREND_SL_ATR', '1.2')),
-            "TP_ATR": float(os.getenv('TREND_TP_ATR', '3.5')),
-            "TRAIL_START": float(os.getenv('TREND_TRAIL_START', '1.8')),
-            "TRAIL_DIST": float(os.getenv('TREND_TRAIL_DIST', '1.2')),
-            "MAX_BARS": int(os.getenv('TREND_MAX_BARS', '60'))
-        },
-        "MR": {
-            "SL_ATR": float(os.getenv('MR_SL_ATR', '1.0')),
-            "TP_ATR": float(os.getenv('MR_TP_ATR', '2.5')),
-            "TRAIL_START": float(os.getenv('MR_TRAIL_START', '1.2')),
-            "TRAIL_DIST": float(os.getenv('MR_TRAIL_DIST', '0.8')),
-            "MAX_BARS": int(os.getenv('MR_MAX_BARS', '30'))
-        }
-    }
+    # Note: Strategy PARAMS moved to services/strategy.py for simplicity
+    # PARAMS is no longer loaded from .env
+    
     
     # Spread Filter - Per Asset Class
     MAX_SPREAD_FOREX: float = float(os.getenv('MAX_SPREAD_FOREX', '3.0'))   # Forex pairs
@@ -82,8 +72,7 @@ class Settings:
             return cls.MAX_SPREAD_METALS
         return cls.MAX_SPREAD_FOREX
     
-    # News Filter (High Impact Events)
-    NEWS_BLACKOUT_MINUTES: int = int(os.getenv('NEWS_BLACKOUT_MINUTES', '30'))
+
     
     # Web Dashboard
     WEB_HOST: str = os.getenv('WEB_HOST', '0.0.0.0')

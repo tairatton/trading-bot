@@ -18,17 +18,17 @@ import ta
 STRATEGY_PARAMS = {
     "TREND": {
         "SL_ATR": 1.2,       # Stop Loss = 1.2 x ATR
-        "TP_ATR": 3.5,       # Take Profit = 3.5 x ATR
-        "TRAIL_START": 1.8,  # Start trailing after 1.8 x ATR profit
-        "TRAIL_DIST": 1.2,   # Trail distance = 1.2 x ATR
-        "MAX_BARS": 60       # Max bars in trade
+        "TP_ATR": 3.0,       # Take Profit = 3.0 x ATR (conservative)
+        "TRAIL_START": 1.0,  # Start trailing after 1.0 x ATR profit (faster lock)
+        "TRAIL_DIST": 0.7,   # Trail distance = 0.7 x ATR (tighter)
+        "MAX_BARS": 50       # Max bars in trade (shorter hold)
     },
     "MR": {
-        "SL_ATR": 1.0,
-        "TP_ATR": 2.5,
-        "TRAIL_START": 1.2,
-        "TRAIL_DIST": 0.8,
-        "MAX_BARS": 30
+        "SL_ATR": 0.8,       # Tighter SL
+        "TP_ATR": 2.0,       # Conservative TP
+        "TRAIL_START": 0.7,  # Faster trail
+        "TRAIL_DIST": 0.5,   # Tighter trail
+        "MAX_BARS": 25       # Shorter hold
     }
 }
 
