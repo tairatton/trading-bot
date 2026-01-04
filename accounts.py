@@ -14,12 +14,6 @@ ACCOUNTS_LIST = [
         "login": 413124491, 
         "password": "Non0618944274.", 
         "server": "Exness-MT5Trial6"
-    },
-    {
-        "name": "Ton_Test", 
-        "login": 415072949, 
-        "password": "aA33013302+", 
-        "server": "Exness-MT5Trial14"
     }
 ]
 
