@@ -1,8 +1,8 @@
-"""MetaTrader 5 Service for Exness broker connection with Multi-Account Support."""
 from datetime import datetime
 from typing import Optional, Dict, Any, List
 import json
 import os
+from pathlib import Path
 from config import settings
 
 # Try to import MT5 (only works on Windows)
@@ -65,17 +65,20 @@ class MT5Service:
         print("[MT5] Disconnected")
     
     def _load_accounts(self):
-        """Load accounts from accounts.json if exists."""
-        accounts_file = os.path.join(os.path.dirname(os.path.dirname(__file__)), "accounts.json")
-        if os.path.exists(accounts_file):
-            try:
-                with open(accounts_file, 'r') as f:
-                    data = json.load(f)
-                    if data.get("enabled", False):
-                        self.accounts = data.get("accounts", [])
-                        print(f"[MT5] Loaded {len(self.accounts)} accounts from accounts.json")
-            except Exception as e:
-                print(f"[MT5] Error loading accounts.json: {e}")
+        """Load accounts from accounts.py if exists."""
+        try:
+            import sys
+            # Add parent directory to path to find accounts.py
+            sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+            from accounts import ACCOUNTS_LIST
+            
+            if ACCOUNTS_LIST:
+                self.accounts = ACCOUNTS_LIST
+                print(f"[MT5] Loaded {len(self.accounts)} accounts from accounts.py")
+        except ImportError:
+            print("[MT5] accounts.py not found or ACCOUNTS_LIST not defined")
+        except Exception as e:
+            print(f"[MT5] Error loading accounts: {e}")
     
     def login_account(self, account: Dict) -> bool:
         """Login to a specific account."""
