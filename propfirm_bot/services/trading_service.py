@@ -375,18 +375,34 @@ class TradingService:
                 # =========================================================
                 # WEEKEND SAFETY MODE (Friday Force Close)
                 # =========================================================
+                # =========================================================
+                # WEEKEND SAFETY MODE (Friday Force Close)
+                # =========================================================
                 if settings.CLOSE_ON_FRIDAY and datetime.utcnow().weekday() == 4:
                     if datetime.utcnow().hour >= settings.FRIDAY_CLOSE_HOUR_UTC:
-                        logger.warning("[WEEKEND] Cut-off time reached! Closing all positions to sleep well 😴")
+                        logger.warning("[WEEKEND] Cut-off time reached! Closing ALL positions to sleep well 😴")
                         
-                        # Close all open positions
-                        positions = mt5_service.get_open_positions()
-                        if positions:
-                            res = mt5_service.close_all_positions()
-                            if res["closed"] > 0:
-                                msg = f"🛑 <b>WEEKEND FORCE CLOSE</b>\n\nClosed {res['closed']} positions to avoid gap risk.\nSee you next week! 👋"
-                                telegram_service.send_message(msg)
-                                logger.info(f"[WEEKEND] Closed {res['closed']} positions")
+                        total_closed = 0
+                        
+                        # Loop through ALL accounts to close positions
+                        for acc in mt5_service.accounts:
+                            try:
+                                if not mt5_service.login_account(acc):
+                                    logger.error(f"[WEEKEND] Failed to login {acc['name']} for closing")
+                                    continue
+                                    
+                                positions = mt5_service.get_open_positions()
+                                if positions:
+                                    res = mt5_service.close_all_positions()
+                                    if res["closed"] > 0:
+                                        total_closed += res["closed"]
+                                        logger.info(f"[WEEKEND] Closed {res['closed']} positions on {acc['name']}")
+                            except Exception as e:
+                                logger.error(f"[WEEKEND] Error on {acc['name']}: {e}")
+                                
+                        if total_closed > 0:
+                            msg = f"🛑 <b>WEEKEND FORCE CLOSE</b>\n\nClosed {total_closed} positions across all accounts.\nSee you next week! 👋"
+                            telegram_service.send_message(msg)
                         
                         # Wait and skip trading scan
                         logger.info("[WEEKEND] Standing by until Monday...")
@@ -486,7 +502,18 @@ class TradingService:
                                         
                                         if result.get("success"):
                                             logger.info(f"[{acc['name']}] Order SUCCESS: #{result.get('order_id')}")
-                                            # Optional: Verify trade with specific account checking logic if needed
+                                            
+                                            # Send Individual Telegram Notification
+                                            telegram_service.notify_trade_opened(
+                                                symbol=symbol,
+                                                trade_type=signal_info["signal"],
+                                                price=result.get("price", price),
+                                                lots=lots,
+                                                sl=sl,
+                                                tp=tp,
+                                                signal_type=signal_type,
+                                                account_name=acc['name']
+                                            )
                                         else:
                                             logger.error(f"[{acc['name']}] Order FAILED: {result.get('error')}")
                                             

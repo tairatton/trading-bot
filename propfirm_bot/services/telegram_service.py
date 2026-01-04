@@ -46,13 +46,15 @@ class TelegramService:
     # ===== Trade Notifications =====
     
     def notify_trade_opened(self, symbol: str, trade_type: str, price: float, 
-                           lots: float, sl: float, tp: float, signal_type: str = ""):
+                           lots: float, sl: float, tp: float, signal_type: str = "",
+                           account_name: str = ""):
         """Notify when a trade is opened."""
         emoji = "🟢" if trade_type.upper() == "BUY" else "🔴"
+        acc_line = f"<b>Account:</b> {account_name}\n" if account_name else ""
         msg = f"""
 {emoji} <b>TRADE OPENED</b>
 
-<b>Symbol:</b> {symbol}
+{acc_line}<b>Symbol:</b> {symbol}
 <b>Type:</b> {trade_type.upper()} ({signal_type})
 <b>Price:</b> {price:.5f}
 <b>Lots:</b> {lots}
@@ -63,14 +65,16 @@ class TelegramService:
     
     def notify_trade_closed(self, symbol: str, trade_type: str, 
                            entry_price: float, exit_price: float,
-                           profit: float, reason: str = ""):
+                           profit: float, reason: str = "",
+                           account_name: str = ""):
         """Notify when a trade is closed."""
         emoji = "✅" if profit >= 0 else "❌"
         profit_sign = "+" if profit >= 0 else ""
+        acc_line = f"<b>Account:</b> {account_name}\n" if account_name else ""
         msg = f"""
 {emoji} <b>TRADE CLOSED</b>
 
-<b>Symbol:</b> {symbol}
+{acc_line}<b>Symbol:</b> {symbol}
 <b>Type:</b> {trade_type.upper()}
 <b>Entry:</b> {entry_price:.5f}
 <b>Exit:</b> {exit_price:.5f}
