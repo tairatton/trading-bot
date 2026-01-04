@@ -1,0 +1,17 @@
+{
+    "enabled": true,
+    "accounts": [
+        {
+            "name": "Main Account",
+            "login": 0,
+            "password": "",
+            "server": "Exness-MT5Real"
+        },
+        {
+            "name": "Account 2",
+            "login": 0,
+            "password": "",
+            "server": "Exness-MT5Real"
+        }
+    ]
+}

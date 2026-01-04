@@ -198,6 +198,7 @@ async def get_status():
             "account": account,
             "price": price,
             "mt5_connected": mt5_service.connected,
+            "account_count": len(mt5_service.accounts) if mt5_service.accounts else 1,
             "open_pnl": open_pnl,  # New: calculated from all positions
             "today_pnl": total_closed_pnl,
             "timestamp": datetime.now().isoformat()
@@ -206,6 +207,7 @@ async def get_status():
         return JSONResponse({
             "error": str(e),
             "mt5_connected": mt5_service.connected,
+            "account_count": len(mt5_service.accounts) if mt5_service.accounts else 1,
             "timestamp": datetime.now().isoformat()
         })
 

@@ -1,6 +1,8 @@
-"""MetaTrader 5 Service for Exness broker connection."""
+"""MetaTrader 5 Service for Exness broker connection with Multi-Account Support."""
 from datetime import datetime
 from typing import Optional, Dict, Any, List
+import json
+import os
 from config import settings
 
 # Try to import MT5 (only works on Windows)
@@ -14,11 +16,14 @@ except ImportError:
 
 
 class MT5Service:
-    """Service to interact with MetaTrader 5 (Exness)."""
+    """Service to interact with MetaTrader 5 (Exness) with Multi-Account support."""
     
     def __init__(self):
         self.connected = False
         self.account_info = None
+        self.accounts = []  # List of account configs
+        self.current_account = None  # Currently logged in account
+        self._load_accounts()
     
     def connect(self) -> bool:
         """Connect to MT5 terminal."""
@@ -56,7 +61,86 @@ class MT5Service:
         """Disconnect from MT5."""
         mt5.shutdown()
         self.connected = False
+        self.current_account = None
         print("[MT5] Disconnected")
+    
+    def _load_accounts(self):
+        """Load accounts from accounts.json if exists."""
+        accounts_file = os.path.join(os.path.dirname(os.path.dirname(__file__)), "accounts.json")
+        if os.path.exists(accounts_file):
+            try:
+                with open(accounts_file, 'r') as f:
+                    data = json.load(f)
+                    if data.get("enabled", False):
+                        self.accounts = data.get("accounts", [])
+                        print(f"[MT5] Loaded {len(self.accounts)} accounts from accounts.json")
+            except Exception as e:
+                print(f"[MT5] Error loading accounts.json: {e}")
+    
+    def login_account(self, account: Dict) -> bool:
+        """Login to a specific account."""
+        if not MT5_AVAILABLE:
+            return False
+        
+        # Initialize MT5 if not already
+        if not mt5.initialize(path=settings.MT5_PATH if settings.MT5_PATH else None):
+            print(f"[MT5] Failed to initialize: {mt5.last_error()}")
+            return False
+        
+        # Login to the specified account
+        authorized = mt5.login(
+            login=int(account.get("login", 0)),
+            password=account.get("password", ""),
+            server=account.get("server", "")
+        )
+        
+        if authorized:
+            self.connected = True
+            self.current_account = account
+            self.account_info = mt5.account_info()._asdict()
+            print(f"[MT5] Logged in: {account.get('name', account.get('login'))}")
+            return True
+        else:
+            print(f"[MT5] Login failed for {account.get('name')}: {mt5.last_error()}")
+            return False
+    
+    def trade_all_accounts(self, order_type: str, symbol: str, volume: float, 
+                           sl: float = 0, tp: float = 0, comment: str = "") -> List[Dict]:
+        """Execute trade on all configured accounts sequentially."""
+        results = []
+        
+        if not self.accounts:
+            # No multi-account configured, use default
+            result = self.place_order(order_type, symbol, volume, sl, tp, comment)
+            result["account"] = "default"
+            return [result]
+        
+        for account in self.accounts:
+            if account.get("login", 0) == 0:
+                continue  # Skip unconfigured accounts
+            
+            print(f"[MULTI] Trading on {account.get('name', account.get('login'))}...")
+            
+            # Login to this account
+            if self.login_account(account):
+                # Place order
+                result = self.place_order(order_type, symbol, volume, sl, tp, comment)
+                result["account"] = account.get("name", str(account.get("login")))
+                results.append(result)
+                
+                if result.get("success"):
+                    print(f"[MULTI] ✓ Order placed on {result['account']}")
+                else:
+                    print(f"[MULTI] ✗ Failed on {result['account']}: {result.get('error')}")
+            else:
+                results.append({
+                    "success": False,
+                    "account": account.get("name", str(account.get("login"))),
+                    "error": "Login failed"
+                })
+        
+        return results
+
     
     def is_connected(self) -> bool:
         """Check if MT5 connection is alive."""

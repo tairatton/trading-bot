@@ -1,0 +1,763 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Trading Bot Dashboard</title>
+    <style>
+        :root {
+            --bg-primary: #0f0f1a;
+            --bg-secondary: #1a1a2e;
+            --bg-card: #16213e;
+            --accent: #00d4ff;
+            --accent-green: #00ff88;
+            --accent-red: #ff4757;
+            --accent-yellow: #ffa502;
+            --text-primary: #ffffff;
+            --text-secondary: #a0a0a0;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            height: 100vh;
+            padding: 10px 15px;
+            overflow: hidden;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            padding: 12px 20px;
+            background: var(--bg-card);
+            border-radius: 10px;
+            border: 1px solid rgba(0, 212, 255, 0.2);
+        }
+
+        .header h1 {
+            background: linear-gradient(135deg, var(--accent), var(--accent-green));
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+            font-size: 20px;
+        }
+
+        .status-badge {
+            padding: 8px 20px;
+            border-radius: 20px;
+            font-weight: 600;
+            font-size: 14px;
+        }
+
+        .status-running {
+            background: var(--accent-green);
+            color: #000;
+        }
+
+        .status-stopped {
+            background: var(--accent-red);
+            color: #fff;
+        }
+
+        .status-paused {
+            background: var(--accent-yellow);
+            color: #000;
+        }
+
+        .status-disconnected {
+            background: var(--text-secondary);
+            color: #fff;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 15px;
+            margin-bottom: 0;
+        }
+
+        .main-layout {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 10px;
+            align-items: stretch;
+            margin-top: 20px;
+        }
+
+        .main-layout>.card {
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .main-layout .trade-history {
+            max-height: calc(100vh - 220px);
+            overflow-y: auto;
+        }
+
+        .card {
+            background: var(--bg-card);
+            border-radius: 12px;
+            padding: 15px;
+            border: 1px solid rgba(0, 212, 255, 0.1);
+        }
+
+        .card h2 {
+            color: var(--accent);
+            font-size: 14px;
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .stat-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 6px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            font-size: 13px;
+        }
+
+        .stat-label {
+            color: var(--text-secondary);
+        }
+
+        .stat-value {
+            font-weight: 600;
+            font-size: 14px;
+        }
+
+        .stat-value.positive {
+            color: var(--accent-green);
+        }
+
+        .stat-value.negative {
+            color: var(--accent-red);
+        }
+
+        .controls {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 15px;
+        }
+
+        .btn {
+            padding: 15px 25px;
+            border: none;
+            border-radius: 10px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(0, 0, 0, 0.3);
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .btn-connect {
+            background: var(--accent);
+            color: #000;
+            grid-column: span 2;
+        }
+
+        .btn-start {
+            background: var(--accent-green);
+            color: #000;
+        }
+
+        .btn-stop {
+            background: var(--accent-red);
+            color: #fff;
+        }
+
+        .btn-pause {
+            background: var(--accent-yellow);
+            color: #000;
+        }
+
+        .settings-form {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .form-group label {
+            color: var(--text-secondary);
+            font-size: 14px;
+        }
+
+        .form-group input {
+            padding: 12px;
+            border-radius: 8px;
+            border: 1px solid rgba(0, 212, 255, 0.3);
+            background: var(--bg-secondary);
+            color: var(--text-primary);
+            font-size: 16px;
+        }
+
+        .form-group input:focus {
+            outline: none;
+            border-color: var(--accent);
+        }
+
+        .trade-history {
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .trade-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px;
+            margin: 8px 0;
+            background: var(--bg-secondary);
+            border-radius: 8px;
+        }
+
+        .trade-buy {
+            border-left: 4px solid var(--accent-green);
+        }
+
+        .trade-sell {
+            border-left: 4px solid var(--accent-red);
+        }
+
+        .signal-display {
+            text-align: center;
+            padding: 30px;
+            border-radius: 10px;
+            background: var(--bg-secondary);
+        }
+
+        .signal-none {
+            color: var(--text-secondary);
+        }
+
+        .signal-buy {
+            color: var(--accent-green);
+            font-size: 24px;
+            font-weight: bold;
+        }
+
+        .signal-sell {
+            color: var(--accent-red);
+            font-size: 24px;
+            font-weight: bold;
+        }
+
+        .price-display {
+            font-size: 32px;
+            font-weight: bold;
+            text-align: center;
+            padding: 20px;
+            background: linear-gradient(135deg, var(--bg-secondary), var(--bg-card));
+            border-radius: 10px;
+            margin-bottom: 20px;
+        }
+
+        @keyframes pulse {
+
+            0%,
+            100% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: 0.5;
+            }
+        }
+
+        .live-indicator {
+            width: 10px;
+            height: 10px;
+            background: var(--accent-green);
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+            display: inline-block;
+            margin-right: 10px;
+        }
+    </style>
+</head>
+
+<body data-connected="{{ 'true' if mt5_connected else 'false' }}"
+    data-running="{{ 'true' if bot_status.running else 'false' }}">
+    <div class="container">
+        <!-- Header -->
+        <div class="header">
+            <h1>🤖 Trading Bot Dashboard</h1>
+            <div>
+                <span
+                    class="status-badge {% if mt5_connected %}{% if bot_status.running %}status-running{% elif bot_status.paused %}status-paused{% else %}status-stopped{% endif %}{% else %}status-disconnected{% endif %}"
+                    id="statusBadge">
+                    {% if not mt5_connected %}DISCONNECTED
+                    {% elif bot_status.running and not bot_status.paused %}RUNNING
+                    {% elif bot_status.paused %}PAUSED
+                    {% else %}STOPPED{% endif %}
+                </span>
+            </div>
+        </div>
+        <div class="main-layout">
+            <!-- Account Info -->
+            <div class="card">
+                <h2>📊 Account</h2>
+                <div class="stat-row">
+                    <span class="stat-label">Balance</span>
+                    <span class="stat-value" id="balance">${{ "%.2f"|format(account.balance|default(0)) }}</span>
+                </div>
+                <div class="stat-row">
+                    <span class="stat-label">Equity</span>
+                    <span class="stat-value" id="equity">${{ "%.2f"|format(account.equity|default(0)) }}</span>
+                </div>
+                <div class="stat-row">
+                    <span class="stat-label">Open P/L</span>
+                    <span
+                        class="stat-value {% if account.profit|default(0) >= 0 %}positive{% else %}negative{% endif %}"
+                        id="profit">
+                        ${{ "%.2f"|format(account.profit|default(0)) }}
+                    </span>
+                </div>
+                <div class="stat-row">
+                    <span class="stat-label">Closed P/L</span>
+                    <span class="stat-value" id="todayPL">--</span>
+                </div>
+
+            </div>
+
+            <!-- Controls -->
+            <div class="card">
+                <h2>🎛️ Controls</h2>
+                <div style="display: flex; flex-direction: column; gap: 8px; width: 100%;">
+
+                    <button class="btn btn-connect" onclick="toggleConnection()" id="btnConnect" style="width: 100%;">
+                        {% if mt5_connected %}Disconnect{% else %}Connect MT5{% endif %}
+                    </button>
+                    <div style="display: flex; gap: 6px; margin-top: 8px; width: 100%;">
+                        <button class="btn btn-start" onclick="startBot()" id="btnStart"
+                            style="flex: 1; padding: 12px; font-size: 16px;" {% if not mt5_connected or
+                            bot_status.running %}disabled{% endif %}>
+                            ▶
+                        </button>
+                        <button class="btn btn-stop" onclick="stopBot()" id="btnStop"
+                            style="flex: 1; padding: 12px; font-size: 16px;" {% if not bot_status.running %}disabled{%
+                            endif %}>
+                            ⏹
+                        </button>
+                        <button class="btn btn-pause" onclick="pauseBot()" id="btnPause"
+                            style="flex: 1; padding: 12px; font-size: 16px;" {% if not bot_status.running %}disabled{%
+                            endif %}>
+                            {% if bot_status.paused %}▶{% else %}⏸{% endif %}
+                        </button>
+                    </div>
+                </div>
+                <!-- Test Buttons (Hidden) -->
+                <div
+                    style="display: none; margin-top: 12px; padding-top: 12px; border-top: 1px solid rgba(0,212,255,0.2);">
+                    <small style="color: var(--text-secondary);">🧪 Test Orders (0.01 lot):</small>
+                    <div style="display: flex; gap: 8px; margin-top: 8px;">
+                        <button class="btn" onclick="testBuy()"
+                            style="flex:1; background: var(--accent-green); color: #000; padding: 8px;">
+                            TEST BUY
+                        </button>
+                        <button class="btn" onclick="testSell()"
+                            style="flex:1; background: var(--accent-red); color: #fff; padding: 8px;">
+                            TEST SELL
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+
+
+            <!-- Settings & Forecast -->
+            <div class="card">
+                <h2>⚙️ Settings</h2>
+                <form class="settings-form" onsubmit="updateSettings(event)">
+                    <div style="margin-bottom: 12px;">
+                        <label
+                            style="color: var(--text-secondary); font-size: 12px; margin-bottom: 4px; display: block;">Risk
+                            (%)</label>
+                        <input type="number" id="riskPercent" step="0.1" value="{{ settings.risk_percent }}"
+                            style="width: 100%; padding: 8px; background: var(--bg-secondary); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: 6px; font-size: 13px;">
+                    </div>
+
+                    <div
+                        style="margin-bottom: 16px; display: flex; align-items: center; justify-content: space-between;">
+                        <label style="color: var(--text-secondary); font-size: 12px;">📱 Signal Alerts
+                            (Telegram)</label>
+                        <label class="switch">
+                            <input type="checkbox" id="signalAlertsToggle" {% if settings.enable_signal_alerts
+                                %}checked{% endif %}>
+                            <span class="slider round"></span>
+                        </label>
+                    </div>
+
+                    <style>
+                        /* Toggle Switch CSS */
+                        .switch {
+                            position: relative;
+                            display: inline-block;
+                            width: 40px;
+                            height: 20px;
+                        }
+
+                        .switch input {
+                            opacity: 0;
+                            width: 0;
+                            height: 0;
+                        }
+
+                        .slider {
+                            position: absolute;
+                            cursor: pointer;
+                            top: 0;
+                            left: 0;
+                            right: 0;
+                            bottom: 0;
+                            background-color: var(--bg-secondary);
+                            transition: .4s;
+                            border-radius: 20px;
+                            border: 1px solid var(--border-color);
+                        }
+
+                        .slider:before {
+                            position: absolute;
+                            content: "";
+                            height: 14px;
+                            width: 14px;
+                            left: 3px;
+                            bottom: 2px;
+                            background-color: var(--text-secondary);
+                            transition: .4s;
+                            border-radius: 50%;
+                        }
+
+                        input:checked+.slider {
+                            background-color: var(--accent-green);
+                            border-color: var(--accent-green);
+                        }
+
+                        input:checked+.slider:before {
+                            transform: translateX(20px);
+                            background-color: white;
+                        }
+                    </style>
+                    <div class="form-group">
+                        <label style="color: var(--accent-green);">Trading Mode</label>
+                        <div
+                            style="color: var(--text-primary); font-weight: 600; padding: 8px; background: rgba(0,255,136,0.1); border-radius: 6px; text-align: center;">
+                            🌐 24H Trading
+                        </div>
+                    </div>
+                    <button type="submit" class="btn btn-connect" style="padding: 10px;">Save</button>
+                </form>
+            </div>
+
+            <!-- Open Positions (Live from MT5) -->
+            <div class="card">
+                <h2><span class="live-indicator"></span>Positions</h2>
+                <div class="trade-history" id="positionsContainer">
+                    <div style="text-align: center; color: var(--text-secondary); padding: 20px;">
+                        Loading...
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Trade History Section -->
+        <div
+            style="margin-top: 15px; background: var(--bg-card); border-radius: 12px; padding: 15px; border: 1px solid rgba(0, 212, 255, 0.1);">
+            <h2 style="color: var(--accent); font-size: 14px; margin-bottom: 10px;">📜 Trade History (Last 7 Days)</h2>
+            <div id="historyContainer" style="max-height: 150px; overflow-y: auto;">
+                <div style="text-align: center; color: var(--text-secondary); padding: 15px;">Loading...</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Get values from data attributes (avoids Jinja2 linting issues)
+        var isConnected = document.body.getAttribute('data-connected') === 'true';
+        var isRunning = document.body.getAttribute('data-running') === 'true';
+
+        async function toggleConnection() {
+            const endpoint = isConnected ? '/api/disconnect' : '/api/connect';
+            const response = await fetch(endpoint, { method: 'POST' });
+            const data = await response.json();
+            alert(data.message);
+            location.reload();
+        }
+
+        async function startBot() {
+            const response = await fetch('/api/start', { method: 'POST' });
+            const data = await response.json();
+            alert(data.message);
+            location.reload();
+        }
+
+        async function stopBot() {
+            const response = await fetch('/api/stop', { method: 'POST' });
+            const data = await response.json();
+            alert(data.message);
+            location.reload();
+        }
+
+
+        async function pauseBot() {
+            const endpoint = document.getElementById('btnPause').textContent.includes('Resume')
+                ? '/api/resume' : '/api/pause';
+            const response = await fetch(endpoint, { method: 'POST' });
+            const data = await response.json();
+            alert(data.message);
+            location.reload();
+        }
+
+
+
+        async function updateSettings(e) {
+            e.preventDefault();
+            const formData = new FormData();
+            formData.append('risk_percent', document.getElementById('riskPercent').value);
+            // formData.append('symbol', document.getElementById('symbolSelect').value); // Removed symbol selection
+
+            // Checkbox value
+            const alertEnabled = document.getElementById('signalAlertsToggle').checked;
+            formData.append('enable_signal_alerts', alertEnabled);
+
+            try {
+                const response = await fetch('/api/settings', { method: 'POST', body: formData });
+                const data = await response.json();
+
+                // Show save confirmation
+                const btn = e.target.querySelector('button[type="submit"]'); // Target the submit button specifically
+                const originalText = btn.textContent;
+                const originalBackground = btn.style.background; // Store original background
+                btn.textContent = 'Saved! ✅';
+                btn.style.background = 'var(--accent-green)';
+
+                setTimeout(() => {
+                    btn.textContent = originalText;
+                    btn.style.background = originalBackground; // Restore original background
+                }, 2000);
+            } catch (err) {
+                console.error('Save failed:', err);
+                alert('Failed to save settings');
+            }
+        }
+
+        var networkErrorCount = 0;
+
+        async function updateStatus() {
+            if (!isConnected) return;
+
+            try {
+                // Get status
+                const statusRes = await fetch('/api/status');
+                if (!statusRes.ok) throw new Error('Status fetch failed');
+                const status = await statusRes.json();
+
+                if (status.account) {
+                    document.getElementById('balance').textContent = '$' + (status.account.balance || 0).toFixed(2);
+                    document.getElementById('equity').textContent = '$' + (status.account.equity || 0).toFixed(2);
+
+                    const profit = status.open_pnl || status.account.profit || 0;
+                    const profitEl = document.getElementById('profit');
+                    profitEl.textContent = '$' + profit.toFixed(2);
+                    profitEl.className = 'stat-value ' + (profit > 0 ? 'positive' : profit < 0 ? 'negative' : '');
+                }
+
+                // Closed P/L
+                const todayPnl = status.today_pnl || 0;
+                const todayEl = document.getElementById('todayPL');
+                if (todayEl) {
+                    todayEl.textContent = '$' + (todayPnl > 0 ? '+' : '') + todayPnl.toFixed(2);
+                    todayEl.className = 'stat-value ' + (todayPnl > 0 ? 'positive' : todayPnl < 0 ? 'negative' : '');
+                }
+
+                // Reset error count on success
+                networkErrorCount = 0;
+
+            } catch (error) {
+                networkErrorCount++;
+                // Only log every 5th error to avoid console spam
+                if (networkErrorCount === 1 || networkErrorCount % 5 === 0) {
+                    console.warn('[Network] Connection issue, retrying... (count: ' + networkErrorCount + ')');
+                }
+            }
+        }
+
+        // Backtest function removed - forecast section no longer exists
+
+        // Check for trading errors and show popup
+        async function checkErrors() {
+            if (!isConnected || !isRunning) return;
+            try {
+                const response = await fetch('/api/last_error');
+                const data = await response.json();
+                if (data.error) {
+                    console.error('[Trading Bot Error]', data.error);
+
+                    // Check if AutoTrading is disabled
+                    if (data.error.includes('AutoTrading disabled') || data.error.includes('10027')) {
+                        alert('⚠️ Order Failed!\n\nAutoTrading is DISABLED in MT5.\n\nPlease enable it:\n1. Open MetaTrader 5\n2. Click "AutoTrading" button in toolbar\n3. Make sure it turns GREEN\n4. Then click START again');
+                    } else {
+                        alert('❌ Order Failed: ' + data.error);
+                    }
+                }
+            } catch (error) {
+                console.error('Error checking errors:', error);
+            }
+        }
+
+        // Fetch and display open positions from MT5
+        async function updatePositions() {
+            if (!isConnected) return;
+            try {
+                const response = await fetch('/api/positions');
+                const data = await response.json();
+                const container = document.getElementById('positionsContainer');
+
+                if (data.positions && data.positions.length > 0) {
+                    let html = '';
+                    data.positions.forEach(pos => {
+                        const type = pos.type === 0 ? 'BUY' : 'SELL';
+                        const typeClass = pos.type === 0 ? 'buy' : 'sell';
+                        const profit = pos.profit.toFixed(2);
+                        const profitClass = pos.profit >= 0 ? 'positive' : 'negative';
+                        const symbol = pos.symbol || 'Unknown';
+                        // Format prices based on magnitude
+                        const priceOpen = pos.price_open > 100 ? pos.price_open.toFixed(2) : pos.price_open.toFixed(5);
+                        const priceCurrent = pos.price_current > 100 ? pos.price_current.toFixed(2) : pos.price_current.toFixed(5);
+                        html += `
+                            <div class="trade-row trade-${typeClass}" style="padding: 8px 10px; margin-bottom: 6px; border-radius: 6px; background: rgba(0,212,255,0.05);">
+                                <div style="display: flex; justify-content: space-between; align-items: center; gap: 8px;">
+                                    <div style="flex: 1;">
+                                        <strong style="color: var(--accent-${typeClass === 'buy' ? 'green' : 'red'})">${type}</strong>
+                                        <span style="color: var(--accent); font-size: 10px; margin-left: 4px;">${symbol}</span>
+                                        <span style="color: var(--text-secondary); font-size: 10px; margin-left: 4px;">${pos.volume}lot</span>
+                                        <div style="font-size: 10px; color: var(--text-secondary);">
+                                            ${priceOpen} → ${priceCurrent}
+                                        </div>
+                                    </div>
+                                    <div class="${profitClass}" style="font-weight: bold; font-size: 13px;">
+                                        $${profit}
+                                    </div>
+                                    <button onclick="closePosition(${pos.ticket})" 
+                                        style="background: var(--accent-red); border: none; border-radius: 4px; color: #fff; width: 24px; height: 24px; cursor: pointer; font-size: 11px; flex-shrink: 0;">✕</button>
+                                </div>
+                            </div>
+                        `;
+                    });
+                    container.innerHTML = html;
+                } else {
+                    container.innerHTML = '<div style="text-align: center; color: var(--text-secondary); padding: 20px;">No open positions</div>';
+                }
+            } catch (error) {
+                console.warn('[Positions] Error fetching:', error);
+            }
+        }
+
+        async function closePosition(ticket) {
+            if (!confirm('Close this position?')) return;
+            try {
+                const response = await fetch('/api/close_position/' + ticket, { method: 'POST' });
+                const data = await response.json();
+                if (data.success) {
+                    alert('✅ Position closed!');
+                    updatePositions();
+                    updateHistory();
+                } else {
+                    alert('❌ Close failed: ' + data.error);
+                }
+            } catch (error) {
+                alert('❌ Error: ' + error.message);
+            }
+        }
+
+        async function updateHistory() {
+            if (!isConnected) return;
+            try {
+                const response = await fetch('/api/history');
+                const data = await response.json();
+                const container = document.getElementById('historyContainer');
+
+                if (data.deals && data.deals.length > 0) {
+                    let html = '<table style="width: 100%; font-size: 13px; border-collapse: collapse; table-layout: fixed;">';
+                    html += `
+                        <tr style="color: var(--text-secondary); border-bottom: 1px solid rgba(0,212,255,0.1); height: 30px; position: sticky; top: 0; background: var(--bg-card); z-index: 1;">
+                            <th style="text-align: left; padding: 8px; width: 22%;">Time</th>
+                            <th style="text-align: left; padding: 8px; width: 18%;">Sym</th>
+                            <th style="text-align: center; padding: 8px; width: 10%;">Type</th>
+                            <th style="text-align: right; padding: 8px; width: 12%;">Vol</th>
+                            <th style="text-align: right; padding: 8px; width: 18%;">Price</th>
+                            <th style="text-align: right; padding: 8px; width: 20%;">Profit</th>
+                        </tr>`;
+                    data.deals.reverse().forEach(deal => {
+                        const profitClass = deal.profit >= 0 ? 'positive' : 'negative';
+                        const profitColor = deal.profit >= 0 ? 'var(--accent-green)' : 'var(--accent-red)';
+                        html += `
+                            <tr style="border-bottom: 1px solid rgba(0,212,255,0.05); height: 35px;">
+                                <td style="text-align: left; padding: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${deal.time}</td>
+                                <td style="text-align: left; padding: 8px; color: var(--accent); font-weight: 500;">${deal.symbol || '-'}</td>
+                                <td style="text-align: center; padding: 8px; color: ${deal.type === 'BUY' ? 'var(--accent-green)' : 'var(--accent-red)'}; font-weight: bold;">${deal.type}</td>
+                                <td style="text-align: right; padding: 8px;">${deal.volume}</td>
+                                <td style="text-align: right; padding: 8px;">${deal.price.toFixed(5)}</td>
+                                <td style="text-align: right; padding: 8px; color: ${profitColor}; font-weight: bold;">$${deal.profit.toFixed(2)}</td>
+                            </tr>
+                        `;
+                    });
+                    html += '</table>';
+                    container.innerHTML = html;
+                } else {
+                    container.innerHTML = '<div style="text-align: center; color: var(--text-secondary); padding: 15px;">No trade history</div>';
+                }
+            } catch (error) {
+                console.warn('[History] Error fetching:', error);
+            }
+        }
+
+        // Update every 5 seconds
+        setInterval(updateStatus, 5000);
+        setInterval(updatePositions, 3000);  // Update positions every 3 seconds
+        setInterval(updateHistory, 10000);  // Update history every 10 seconds
+        setInterval(checkErrors, 10000);  // Check errors every 10 seconds
+        updateStatus();
+        updatePositions();
+        updateHistory();
+
+
+    </script>
+</body>
+
+</html>
