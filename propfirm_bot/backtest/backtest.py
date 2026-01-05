@@ -28,7 +28,7 @@ from services.strategy import calculate_indicators, generate_signals
 # PROP FIRM CONFIGURATION
 SYMBOLS = ["EURUSDm", "USDCADm", "USDJPYm"]  # 3 symbols like original
 INITIAL_BALANCE = 10000.0  # $10,000 account
-RISK_PER_TRADE = 0.0018  # 0.18% per trade (0.54% total when all open)
+RISK_PER_TRADE = 0.0015  # 0.15% per trade (0.45% total when all open)
 
 # PROP FIRM LIMITS
 DAILY_LOSS_LIMIT = 0.041  # 4.1% daily stop (buffer below 5% limit)
