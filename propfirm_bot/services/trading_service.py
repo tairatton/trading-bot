@@ -317,12 +317,72 @@ class TradingService:
             self.stats["last_action"] = f"Skipped: Spread {current_spread:.1f} > {max_spread}"
             return {"action": "skip", "reason": f"Spread too high ({current_spread:.1f} pips)"}
         
+        # PRE-TRADE RISK CHECK: Ensure total risk (existing + new) doesn't exceed 4.1%
+        # This prevents opening positions that would risk more than daily loss limit
+        account_info = mt5_service.get_account_info()
+        current_equity = account_info.get("equity", balance)
+        
+        # Calculate risk from existing positions (max potential loss if all SL hit)
+        existing_positions = mt5_service.get_open_positions()
+        existing_risk = 0.0
+        
+        for pos in existing_positions:
+            pos_symbol = pos.get("symbol", "")
+            pos_volume = pos.get("volume", 0)
+            pos_price_open = pos.get("price_open", 0)
+            pos_sl = pos.get("sl", 0)
+            pos_type = pos.get("type", 0)  # 0=buy, 1=sell
+            
+            if pos_sl > 0:  # Only count if SL is set
+                # Calculate pip value for this position's symbol
+                if "JPY" in pos_symbol.upper():
+                    pip_mult = 1000
+                else:
+                    pip_mult = 100000
+                
+                # Calculate potential loss if SL hits
+                if pos_type == 0:  # Buy position
+                    sl_loss = (pos_price_open - pos_sl) * pos_volume * pip_mult
+                else:  # Sell position
+                    sl_loss = (pos_sl - pos_price_open) * pos_volume * pip_mult
+                
+                existing_risk += abs(sl_loss)
+        
+        # Calculate risk from new position
+        params = STRATEGY_PARAMS[signal_type]
+        sl_distance = atr * params["SL_ATR"]
+        new_position_risk = balance * (settings.RISK_PERCENT / 100)
+        
+        # Total risk if we open this position
+        total_risk = existing_risk + new_position_risk
+        total_risk_pct = (total_risk / current_equity) * 100
+        
+        # Check if total risk exceeds 4.1%
+        MAX_TOTAL_RISK_PCT = 4.1
+        if total_risk_pct > MAX_TOTAL_RISK_PCT:
+            logger.warning(f"[{symbol}] PRE-TRADE RISK BLOCK: Total risk {total_risk_pct:.2f}% > {MAX_TOTAL_RISK_PCT}%")
+            logger.warning(f"  Existing risk: ${existing_risk:.2f} ({existing_risk/current_equity*100:.2f}%)")
+            logger.warning(f"  New position risk: ${new_position_risk:.2f} ({new_position_risk/current_equity*100:.2f}%)")
+            self.stats["last_action"] = f"BLOCKED: Total risk {total_risk_pct:.1f}% > {MAX_TOTAL_RISK_PCT}%"
+            
+            # Send Telegram warning
+            telegram_service.notify_error(
+                f"⚠️ Trade Blocked - Risk Protection\n\n"
+                f"Symbol: {symbol}\n"
+                f"Existing risk: ${existing_risk:.0f} ({existing_risk/current_equity*100:.1f}%)\n"
+                f"New position: ${new_position_risk:.0f} ({new_position_risk/current_equity*100:.1f}%)\n"
+                f"Total: {total_risk_pct:.1f}% > {MAX_TOTAL_RISK_PCT}% limit"
+            )
+            
+            return {"action": "skip", "reason": f"Total risk {total_risk_pct:.1f}% > {MAX_TOTAL_RISK_PCT}%"}
+        
+        logger.info(f"[{symbol}] Pre-trade risk check: {total_risk_pct:.2f}% \u003c {MAX_TOTAL_RISK_PCT}% [OK]")
+        
         # Calculate position size
         lots = self.calculate_position_size(balance, atr, signal_type, symbol=symbol, mt5_service=mt5_service)
         
         # Calculate SL/TP
-        params = STRATEGY_PARAMS[signal_type]
-        sl_distance = atr * params["SL_ATR"]
+
         tp_distance = atr * params["TP_ATR"]
         
         if signal == "buy":
