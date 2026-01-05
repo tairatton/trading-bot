@@ -591,16 +591,18 @@
                     document.getElementById('equity').textContent = '$' + (status.account.equity || 0).toFixed(2);
 
                     const profit = status.open_pnl || status.account.profit || 0;
+                    const profitPercent = (profit / (status.account.balance || 1)) * 100;
                     const profitEl = document.getElementById('profit');
-                    profitEl.textContent = '$' + profit.toFixed(2);
+                    profitEl.textContent = '$' + profit.toFixed(2) + ' (' + profitPercent.toFixed(2) + '%)';
                     profitEl.className = 'stat-value ' + (profit > 0 ? 'positive' : profit < 0 ? 'negative' : '');
                 }
 
                 // Closed P/L
                 const todayPnl = status.today_pnl || 0;
+                const todayPercent = status.account && status.account.balance ? (todayPnl / status.account.balance) * 100 : 0;
                 const todayEl = document.getElementById('todayPL');
                 if (todayEl) {
-                    todayEl.textContent = '$' + (todayPnl > 0 ? '+' : '') + todayPnl.toFixed(2);
+                    todayEl.textContent = '$' + (todayPnl > 0 ? '+' : '') + todayPnl.toFixed(2) + ' (' + todayPercent.toFixed(2) + '%)';
                     todayEl.className = 'stat-value ' + (todayPnl > 0 ? 'positive' : todayPnl < 0 ? 'negative' : '');
                 }
 
@@ -664,7 +666,7 @@
                                     <div style="flex: 1;">
                                         <strong style="color: var(--accent-${typeClass === 'buy' ? 'green' : 'red'})">${type}</strong>
                                         <span style="color: var(--accent); font-size: 10px; margin-left: 4px;">${symbol}</span>
-                                        <span style="color: var(--text-secondary); font-size: 10px; margin-left: 4px;">${pos.volume}lot</span>
+                                        <span style="color: var(--text-secondary); font-size: 10px; margin-left: 4px;">${pos.volume.toFixed(2)}lot</span>
                                         <div style="font-size: 10px; color: var(--text-secondary);">
                                             ${priceOpen} → ${priceCurrent}
                                         </div>
