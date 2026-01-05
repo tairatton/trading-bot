@@ -50,7 +50,10 @@
         }
 
         .header h1 {
-            color: var(--accent);
+            background: linear-gradient(135deg, var(--accent), var(--accent-green));
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
             font-size: 20px;
         }
 
@@ -315,7 +318,7 @@
         <!-- Header -->
         <div class="header">
             <h1>🤖 {{ settings.bot_name }} <span
-                    style="font-size: 12px; background: {{ settings.bot_badge_color }}; color: #fff; padding: 2px 8px; border-radius: 4px; vertical-align: middle;">{{
+                    style="font-size: 12px; background: {{ settings.bot_badge_color }}; color: #000; padding: 2px 8px; border-radius: 4px; vertical-align: middle;">{{
                     settings.bot_type }}</span></h1>
             <div>
                 <span

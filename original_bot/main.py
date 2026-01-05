@@ -25,12 +25,11 @@ def main():
     args = parser.parse_args()
     
     print("=" * 50)
-    print(f"  TRADING BOT - {settings.BOT_NAME}")
+    print(f"  TRADING BOT - {settings.SYMBOL}")
     print("=" * 50)
     print(f"  Dashboard: http://{args.host}:{args.port}")
-    print(f"  Symbols: {', '.join(settings.ACTIVE_SYMBOLS)}")
     print(f"  Risk: {settings.RISK_PERCENT}% per trade")
-    print(f"  Mode: 24H Trading")
+    print(f"  Session: {settings.SESSION_START_UTC}:00 - {settings.SESSION_END_UTC}:00 UTC")
     print("=" * 50)
     
     if args.demo:

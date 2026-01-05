@@ -177,6 +177,13 @@ async def get_status():
     status = trading_service.get_status()
     mt5_info = mt5_service.get_account_info() if mt5_service.connected else {}
 
+    # Calculate closed P/L from history deals (last 7 days)
+    today_pnl = 0.0
+    if mt5_service.connected:
+        deals = mt5_service.get_history_deals(days=7)
+        for deal in deals:
+            today_pnl += deal.get("profit", 0)
+
     return {
         "bot_status": "running" if status["running"] else "paused" if status["paused"] else "stopped",
         "account": {
@@ -188,6 +195,7 @@ async def get_status():
         "stats": status["stats"],
         "trade_history": status["trade_history"],
         "account_count": 1 if mt5_service.connected else 0,
+        "today_pnl": today_pnl,
     }
 
 

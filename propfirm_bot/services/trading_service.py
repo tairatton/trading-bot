@@ -170,8 +170,18 @@ class TradingService:
         
         return True, daily_loss_pct, "OK"
     
-    def calculate_position_size(self, balance: float, atr: float, signal_type: str) -> float:
-        """Calculate position size based on risk."""
+    def calculate_position_size(self, balance: float, atr: float, signal_type: str, symbol: str = None, mt5_service = None) -> float:
+        """Calculate position size based on risk.
+        
+        Properly handles all symbol types:
+        - Standard Forex (EURUSD, GBPUSD): pip = 0.0001, pip value = 10 USD/lot
+        - JPY pairs (USDJPY, EURJPY): pip = 0.01, pip value varies with price
+        - Metals (XAUUSD): pip = 0.1, pip value = 10 USD/lot
+        - Crypto (BTCUSD): pip = 1, pip value = 1 USD/lot
+        """
+        from config import settings
+        symbol = symbol or settings.SYMBOL
+        
         risk_amount = balance * (settings.RISK_PERCENT / 100)
         sl_atr = STRATEGY_PARAMS[signal_type]["SL_ATR"]
         sl_distance = atr * sl_atr
@@ -179,16 +189,72 @@ class TradingService:
         if sl_distance <= 0:
             return 0.01  # Minimum lot
         
-        # For EURUSD: 1 lot = 100,000 units, 1 pip = $10
-        # position_size in terms of price movement
-        position_units = risk_amount / sl_distance
+        # Get symbol info for accurate lot calculation
+        pip_value_per_lot = 10.0  # Default: $10 per pip for standard forex (1 lot = 100,000 units)
         
-        # Convert to lots (approximate for EURUSD)
-        # 1 mini lot (0.1) = 10,000 units = $1/pip
-        lots = position_units / 10000 * 0.1
+        if mt5_service and mt5_service.connected:
+            try:
+                symbol_info = mt5_service.get_symbol_info(symbol)
+                if symbol_info:
+                    contract_size = symbol_info.get('trade_contract_size', 100000)
+                    digits = symbol_info.get('digits', 5)
+                    point = symbol_info.get('point', 0.00001)
+                    
+                    # Calculate pip size (usually 10 points for 5-digit/3-digit brokers)
+                    if digits == 5 or digits == 3:
+                        pip_size = point * 10
+                    elif digits == 2:  # JPY pairs
+                        pip_size = point * 10
+                    else:
+                        pip_size = point
+                    
+                    # Determine pip value based on symbol type
+                    symbol_upper = symbol.upper()
+                    
+                    if 'JPY' in symbol_upper:
+                        # JPY pairs: pip value = (pip_size / current_price) * contract_size
+                        # For USDJPY at ~156: pip_value = 0.01 / 156 * 100000 = ~6.41 USD
+                        price_info = mt5_service.get_current_price(symbol)
+                        if price_info:
+                            current_price = (price_info.get('bid', 156) + price_info.get('ask', 156)) / 2
+                            pip_value_per_lot = (pip_size / current_price) * contract_size
+                    elif 'XAU' in symbol_upper or 'XAG' in symbol_upper:
+                        # Gold/Silver: typically $10/pip for 1 lot (100oz), pip = 0.1
+                        pip_value_per_lot = 10.0
+                    elif 'BTC' in symbol_upper or 'ETH' in symbol_upper:
+                        # Crypto: varies by broker, usually pip = 1, pip_value = $1/lot
+                        pip_value_per_lot = 1.0
+                    else:
+                        # Standard forex (EURUSD, GBPUSD, etc.): $10/pip for 1 lot
+                        pip_value_per_lot = 10.0
+                        
+                    logger.debug(f"[{symbol}] pip_value_per_lot: ${pip_value_per_lot:.2f}")
+            except Exception as e:
+                logger.warning(f"[{symbol}] Error getting symbol info: {e}, using default pip value")
         
-        # Round to 2 decimals, minimum 0.01
-        lots = max(0.01, round(lots, 2))
+        # Calculate lot size: lots = risk_amount / (SL in pips * pip_value_per_lot)
+        # SL_distance is in price units, need to convert to pips
+        symbol_upper = symbol.upper() if symbol else ""
+        
+        if 'JPY' in symbol_upper:
+            sl_pips = sl_distance * 100  # JPY: 0.01 = 1 pip, so multiply by 100
+        elif 'XAU' in symbol_upper:
+            sl_pips = sl_distance * 10   # Gold: 0.1 = 1 pip
+        elif 'BTC' in symbol_upper or 'ETH' in symbol_upper:
+            sl_pips = sl_distance        # Crypto: 1 = 1 pip
+        else:
+            sl_pips = sl_distance * 10000  # Standard forex: 0.0001 = 1 pip
+        
+        if sl_pips <= 0:
+            return 0.01
+            
+        lots = risk_amount / (sl_pips * pip_value_per_lot)
+        
+        # Round to 2 decimals, minimum 0.01, maximum 10.0
+        lots = max(0.01, min(10.0, round(lots, 2)))
+        
+        logger.info(f"[{symbol}] Lot calc: Risk ${risk_amount:.2f}, SL {sl_pips:.1f} pips, PipVal ${pip_value_per_lot:.2f} => {lots} lots")
+        
         return lots
     
     def process_signal(self, mt5_service, data_service, signal_info: Dict, symbol: str, account_name: str = "") -> Dict:
@@ -252,7 +318,7 @@ class TradingService:
             return {"action": "skip", "reason": f"Spread too high ({current_spread:.1f} pips)"}
         
         # Calculate position size
-        lots = self.calculate_position_size(balance, atr, signal_type)
+        lots = self.calculate_position_size(balance, atr, signal_type, symbol=symbol, mt5_service=mt5_service)
         
         # Calculate SL/TP
         params = STRATEGY_PARAMS[signal_type]

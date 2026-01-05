@@ -22,7 +22,7 @@ CONFIGS = {
     },
     "Prop Firm Bot": {
         "symbols": ["EURUSDm", "USDCADm", "USDJPYm"],
-        "risk": 0.0018,
+        "risk": 0.0016,
         "params": {
             "TREND": {"SL_ATR": 1.2, "TP_ATR": 3.0, "TRAIL_START": 1.0, "TRAIL_DIST": 0.7, "MAX_BARS": 50},
             "MR": {"SL_ATR": 0.8, "TP_ATR": 2.0, "TRAIL_START": 0.7, "TRAIL_DIST": 0.5, "MAX_BARS": 25}
@@ -53,18 +53,42 @@ def run_backtest(config_name, config):
     risk = config["risk"]
     params = config["params"]
     
+    # Try to load from cache first
+    CACHE_FILE = "backtest_data_cache.pkl"
     all_data = {}
-    for symbol in symbols:
-        rates = mt5.copy_rates_from_pos(symbol, mt5.TIMEFRAME_M30, 0, 70000)
-        if rates is None:
-            return None
-        df = pd.DataFrame(rates)
-        df['time'] = pd.to_datetime(df['time'], unit='s')
-        df.set_index('time', inplace=True)
-        df.rename(columns={'open': 'Open', 'high': 'High', 'low': 'Low', 'close': 'Close'}, inplace=True)
-        df = calculate_indicators(df)
-        df = generate_signals(df)
-        all_data[symbol] = df
+    
+    if os.path.exists(CACHE_FILE):
+        print(f"   [*] Loading from cache: {CACHE_FILE}")
+        import pickle
+        with open(CACHE_FILE, 'rb') as f:
+            cached_data = pickle.load(f)
+        
+        # Filter only symbols we need
+        for symbol in symbols:
+            if symbol in cached_data:
+                all_data[symbol] = cached_data[symbol]
+        
+        if len(all_data) == len(symbols):
+            print(f"   [OK] Cache loaded successfully ({len(symbols)} symbols)")
+        else:
+            print(f"   [!] Cache incomplete, loading from MT5...")
+            all_data = {}
+    else:
+        print(f"   [i] No cache found, loading from MT5 (this may take a while)...")
+    
+    # Load from MT5 if cache failed or doesn't exist
+    if not all_data:
+        for symbol in symbols:
+            rates = mt5.copy_rates_from_pos(symbol, mt5.TIMEFRAME_M30, 0, 70000)
+            if rates is None:
+                return None
+            df = pd.DataFrame(rates)
+            df['time'] = pd.to_datetime(df['time'], unit='s')
+            df.set_index('time', inplace=True)
+            df.rename(columns={'open': 'Open', 'high': 'High', 'low': 'Low', 'close': 'Close'}, inplace=True)
+            df = calculate_indicators(df)
+            df = generate_signals(df)
+            all_data[symbol] = df
     
     common_index = all_data[symbols[0]].index
     for symbol in symbols[1:]:
@@ -87,6 +111,9 @@ def run_backtest(config_name, config):
     drawdown_curve = []
     
     start_idx = 250
+    start_date = common_index[start_idx]
+    one_year_balance = None
+    three_month_balance = None
     
     for i in range(start_idx, len(common_index)):
         current_time = common_index[i]
@@ -192,6 +219,11 @@ def run_backtest(config_name, config):
             peak_balance = balance
         dd = (peak_balance - balance) / peak_balance * 100
         max_drawdown = max(max_drawdown, dd)
+        if one_year_balance is None and (current_time - start_date).days >= 365:
+            one_year_balance = balance
+        if three_month_balance is None and (current_time - start_date).days >= 90:
+            three_month_balance = balance
+
         drawdown_curve.append({"time": current_time, "dd": dd})
     
     # Calculate metrics
@@ -214,6 +246,27 @@ def run_backtest(config_name, config):
     total_months = total_days / 30
     monthly_return = ((balance - INITIAL_BALANCE) / INITIAL_BALANCE / total_months * 100) if total_months > 0 else 0
     
+    # Calculate Monthly Negative Stats
+    monthly_pnl_map = {}
+    for date, pnl in daily_pnl.items():
+        m_key = date.strftime("%Y-%m")
+        monthly_pnl_map[m_key] = monthly_pnl_map.get(m_key, 0) + pnl
+    
+    total_m = len(monthly_pnl_map)
+    neg_m = sum(1 for pnl in monthly_pnl_map.values() if pnl < 0)
+    worst_m_usd = min(monthly_pnl_map.values()) if monthly_pnl_map else 0
+    
+    # Calculate Monthly Return %
+    monthly_ret_map = {}
+    current_bal_tracker = INITIAL_BALANCE
+    sorted_months = sorted(monthly_pnl_map.keys())
+    
+    for m in sorted_months:
+        pnl = monthly_pnl_map[m]
+        ret_pct = (pnl / current_bal_tracker) * 100
+        monthly_ret_map[m] = ret_pct
+        current_bal_tracker += pnl
+    
     return {
         "equity_df": pd.DataFrame(equity_curve),
         "dd_df": pd.DataFrame(drawdown_curve),
@@ -225,6 +278,15 @@ def run_backtest(config_name, config):
         "total_trades": len(trades),
         "win_rate": len(wins) / len(trades) * 100 if len(trades) > 0 else 0,
         "profit_factor": total_profit / total_loss_amt if total_loss_amt > 0 else 0,
+        "profit_factor": total_profit / total_loss_amt if total_loss_amt > 0 else 0,
+        "one_year_balance": one_year_balance if one_year_balance else balance,
+        "three_month_balance": three_month_balance if three_month_balance else balance,
+        "total_months": total_m,
+        "negative_months": neg_m,
+        "worst_month_usd": worst_m_usd,
+        "worst_month_usd": worst_m_usd,
+        "monthly_ret_map": monthly_ret_map,
+        "monthly_pnl_map": monthly_pnl_map,
         "color": config["color"]
     }
 
@@ -336,8 +398,10 @@ def main():
     print("=" * 70)
     print(f"{'Metric':<20} {'Original Bot':>15} {'Prop Firm Bot':>15}")
     print("-" * 70)
-    print(f"{'Risk/Trade':<20} {'0.5%':>15} {'0.15%':>15}")
-    print(f"{'Total Risk':<20} {'1.5%':>15} {'0.45%':>15}")
+    orig_risk = CONFIGS["Original Bot"]["risk"] * 100
+    prop_risk = CONFIGS["Prop Firm Bot"]["risk"] * 100
+    print(f"{'Risk/Trade':<20} {f'{orig_risk:.2f}%':>15} {f'{prop_risk:.2f}%':>15}")
+    print(f"{'Total Risk':<20} {f'{orig_risk*3:.2f}%':>15} {f'{prop_risk*3:.2f}%':>15}")
     print(f"{'Trades':<20} {results['Original Bot']['total_trades']:>15,} {results['Prop Firm Bot']['total_trades']:>15,}")
     print(f"{'Win Rate':<20} {results['Original Bot']['win_rate']:>14.1f}% {results['Prop Firm Bot']['win_rate']:>14.1f}%")
     print(f"{'Profit Factor':<20} {results['Original Bot']['profit_factor']:>15.2f} {results['Prop Firm Bot']['profit_factor']:>15.2f}")
@@ -346,6 +410,67 @@ def main():
     print(f"{'Monthly Return':<20} {results['Original Bot']['monthly_return']:>14.1f}% {results['Prop Firm Bot']['monthly_return']:>14.1f}%")
     print(f"{'Max DD':<20} {results['Original Bot']['max_dd']:>14.1f}% {results['Prop Firm Bot']['max_dd']:>14.1f}%")
     print(f"{'Max Daily Loss':<20} {results['Original Bot']['max_daily_loss']:>14.1f}% {results['Prop Firm Bot']['max_daily_loss']:>14.1f}%")
+    
+    orig_y1 = (results['Original Bot']['one_year_balance'] - INITIAL_BALANCE) / INITIAL_BALANCE * 100
+    prop_y1 = (results['Prop Firm Bot']['one_year_balance'] - INITIAL_BALANCE) / INITIAL_BALANCE * 100
+    print(f"{'Year 1 Return':<20} {orig_y1:>14.1f}% {prop_y1:>14.1f}%")
+    
+    print("-" * 70)
+    print(f"{'Total Months':<20} {results['Original Bot']['total_months']:>15} {results['Prop Firm Bot']['total_months']:>15}")
+    print(f"{'Negative Months':<20} {results['Original Bot']['negative_months']:>15} {results['Prop Firm Bot']['negative_months']:>15}")
+    print(f"{'Worst Month ($)':<20} ${results['Original Bot']['worst_month_usd']:>14,.0f} ${results['Prop Firm Bot']['worst_month_usd']:>14,.0f}")
+    
+    print("=" * 70)
+    print("   MONTHLY RETURNS (Last 12 Months)")
+    print("=" * 70)
+    print(f"{'Month':<10} {'Original':>12} {'Prop Firm':>12}")
+    print("-" * 40)
+    
+    orig_months = results['Original Bot']['monthly_ret_map']
+    prop_months = results['Prop Firm Bot']['monthly_ret_map']
+    sorted_m = sorted(orig_months.keys())
+    
+    # Show last 12 months for brevity in manual runs, but user asked to see
+    # Let's show All if user wants, or maybe year by year summary.
+    # For now, let's show last 12 months detailed, and yearly avg?
+    # User asked "per month", giving all 80 rows might be spam but let's try displaying nicely.
+    
+    # Let's show YEARLY SUMMARY for cleaner view
+    print("\n   YEARLY PERFORMANCE")
+    print("-" * 50)
+    print(f"{'Year':<6} {'Original':>12} {'Prop Firm':>12}")
+    
+    years = sorted(list(set([m.split('-')[0] for m in sorted_m])))
+    for y in years:
+        orig_y_ret = sum([v for k,v in orig_months.items() if k.startswith(y)])
+        prop_y_ret = sum([v for k,v in prop_months.items() if k.startswith(y)])
+        print(f"{y:<6} {orig_y_ret:>11.1f}% {prop_y_ret:>11.1f}%")
+        
+    print("-" * 50)
+    print("Saving full monthly report to 'monthly_returns.csv'...")
+    
+    # Save CSV
+    data = []
+    for m in sorted_m:
+        data.append({
+            "Month": m,
+            "Original_Ret": orig_months.get(m, 0),
+            "Original_PnL": results["Original Bot"]["monthly_pnl_map"].get(m, 0),
+            "Prop_Ret": prop_months.get(m, 0),
+            "Prop_PnL": results["Prop Firm Bot"]["monthly_pnl_map"].get(m, 0)
+        })
+    pd.DataFrame(data).to_csv("monthly_returns.csv", index=False)
+    
+    print("=" * 70)
+    
+    orig_y1 = (results['Original Bot']['one_year_balance'] - INITIAL_BALANCE) / INITIAL_BALANCE * 100
+    prop_y1 = (results['Prop Firm Bot']['one_year_balance'] - INITIAL_BALANCE) / INITIAL_BALANCE * 100
+    print(f"{'Year 1 Return':<20} {orig_y1:>14.1f}% {prop_y1:>14.1f}%")
+    
+    orig_3m = (results['Original Bot']['three_month_balance'] - INITIAL_BALANCE) / INITIAL_BALANCE * 100
+    prop_3m = (results['Prop Firm Bot']['three_month_balance'] - INITIAL_BALANCE) / INITIAL_BALANCE * 100
+    print(f"{'3-Month Return':<20} {orig_3m:>14.1f}% {prop_3m:>14.1f}%")
+
     print("=" * 70)
     
     plt.show()
