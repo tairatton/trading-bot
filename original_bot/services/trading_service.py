@@ -401,26 +401,22 @@ class TradingService:
                 # =========================================================
                 # WEEKEND SAFETY MODE (Friday Force Close)
                 # =========================================================
-                # =========================================================
-                # WEEKEND SAFETY MODE (Friday Force Close)
-                # =========================================================
                 if settings.CLOSE_ON_FRIDAY and datetime.utcnow().weekday() == 4:
                     if datetime.utcnow().hour >= settings.FRIDAY_CLOSE_HOUR_UTC:
-                        logger.warning("[WEEKEND] Cut-off time reached! Closing ALL positions to sleep well 😴")
+                        logger.warning("[WEEKEND] Cut-off time reached! Closing ALL positions (silent mode - no alerts)")
 
                         res = mt5_service.close_all_positions()
                         total_closed = int(res.get("closed", 0))
 
                         if total_closed > 0:
-                            msg = f"🛑 <b>WEEKEND FORCE CLOSE</b>\n\nClosed {total_closed} positions.\nSee you next week! 👋"
-                            telegram_service.send_message(msg)
+                            logger.info(f"[WEEKEND] Closed {total_closed} positions. Weekend mode active.")
+                            # Note: No Telegram notification to avoid disturbing on weekends
                         
                         # Wait and skip trading scan
                         logger.info("[WEEKEND] Standing by until Monday...")
-                        time.sleep(300) # Sleep 5 minutes
+                        time.sleep(300)  # Sleep 5 minutes
                         continue
                 # =========================================================
-
                 # Monitor positions (single account)
                 self.monitor_positions(mt5_service, data_service)
                 
