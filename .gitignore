@@ -31,7 +31,7 @@ env/
 
 # IDE
 .idea/
-.vscode/
+# .vscode/  # Allow IDE settings to be pushed
 
 # Project specific
 logs/
