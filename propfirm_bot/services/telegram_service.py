@@ -92,12 +92,13 @@ class TelegramService:
 """
         self.send_message(msg.strip())
     
-    def notify_bot_started(self, symbol: str, risk_percent: float):
+    def notify_bot_started(self, symbol: str, risk_percent: float, account_id: str = ""):
         """Notify when bot starts."""
+        acc_line = f"<b>Account:</b> {account_id}\n" if account_id else ""
         msg = f"""
 🤖 <b>BOT STARTED</b>
 
-<b>Symbol:</b> {symbol}
+{acc_line}<b>Symbol:</b> {symbol}
 <b>Risk:</b> {risk_percent}%
 <b>Status:</b> Running
 """
@@ -130,7 +131,8 @@ class TelegramService:
                                price: float, rsi: float = 0, adx: float = 0,
                                is_active_symbol: bool = False,
                                strength: str = "", strength_score: int = 0,
-                               strength_factors: list = None):
+                               strength_factors: list = None,
+                               sl: float = 0, tp: float = 0):
         """Notify when a signal is detected on any symbol."""
         emoji = "🟢" if signal.upper() == "BUY" else "🔴"
         trade_status = "✅ TRADING" if is_active_symbol else "👀 SIGNAL ONLY"
@@ -140,13 +142,18 @@ class TelegramService:
         if strength_factors:
             factors_text = "\n".join([f"  • {f}" for f in strength_factors[:3]])
         
+        # Format SL/TP display
+        sl_tp_text = ""
+        if sl > 0 and tp > 0:
+            sl_tp_text = f"\n<b>SL:</b> {sl:.5f}\n<b>TP:</b> {tp:.5f}"
+        
         msg = f"""
 {emoji} <b>SIGNAL DETECTED</b>
 
 <b>Symbol:</b> {symbol}
 <b>Signal:</b> {signal.upper()} ({signal_type})
 <b>Strength:</b> {strength} ({strength_score}/100)
-<b>Price:</b> {price:.5f}
+<b>Price:</b> {price:.5f}{sl_tp_text}
 <b>RSI:</b> {rsi:.1f} | <b>ADX:</b> {adx:.1f}
 <b>Status:</b> {trade_status}
 """

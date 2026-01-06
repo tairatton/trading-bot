@@ -445,19 +445,35 @@ class TradingService:
                                 # New signal detected
                                 is_active = (symbol in settings.ACTIVE_SYMBOLS)
                                 
+                                # Calculate SL/TP for signal notification
+                                from services.strategy import STRATEGY_PARAMS
+                                sig_price = signal_info["price"]
+                                sig_atr = signal_info.get("atr", 0)
+                                sig_type = signal_info["signal_type"]
+                                sig_params = STRATEGY_PARAMS.get(sig_type, STRATEGY_PARAMS["TREND"])
+                                
+                                if signal_info["signal"] == "buy":
+                                    sig_sl = sig_price - sig_atr * sig_params["SL_ATR"]
+                                    sig_tp = sig_price + sig_atr * sig_params["TP_ATR"]
+                                else:  # sell
+                                    sig_sl = sig_price + sig_atr * sig_params["SL_ATR"]
+                                    sig_tp = sig_price - sig_atr * sig_params["TP_ATR"]
+                                
                                 # Send Notification
                                 if settings.ENABLE_SIGNAL_ALERTS:
                                     telegram_service.notify_signal_detected(
                                         symbol=symbol,
                                         signal=signal_info["signal"],
                                         signal_type=signal_info["signal_type"],
-                                        price=signal_info["price"],
+                                        price=sig_price,
                                         rsi=signal_info.get("rsi", 0),
                                         adx=signal_info.get("adx", 0),
                                         is_active_symbol=is_active,
                                         strength=signal_info.get("strength", ""),
                                         strength_score=signal_info.get("strength_score", 0),
-                                        strength_factors=signal_info.get("strength_factors", [])
+                                        strength_factors=signal_info.get("strength_factors", []),
+                                        sl=sig_sl,
+                                        tp=sig_tp
                                     )
                                     logger.info(f"[{symbol}] Signal Alert Sent: {signal_info['signal']}")
                                 
@@ -510,7 +526,7 @@ class TradingService:
         
         # Send Telegram notification
         symbols_str = ', '.join(settings.ACTIVE_SYMBOLS)
-        telegram_service.notify_bot_started(symbols_str, settings.RISK_PERCENT)
+        telegram_service.notify_bot_started(symbols_str, settings.RISK_PERCENT, str(settings.MT5_LOGIN))
         
         return {"success": True, "message": "Bot started"}
     
