@@ -66,20 +66,10 @@ class MT5Service:
         print("[MT5] Disconnected")
     
     def _load_accounts(self):
-        """Load accounts from accounts.py if exists."""
-        try:
-            import sys
-            # Add parent directory to path to find accounts.py
-            sys.path.insert(0, str(Path(__file__).parent.parent.parent))
-            from accounts import ACCOUNTS_LIST
-            
-            if ACCOUNTS_LIST:
-                self.accounts = ACCOUNTS_LIST
-                print(f"[MT5] Loaded {len(self.accounts)} accounts from accounts.py")
-        except ImportError:
-            print("[MT5] accounts.py not found or ACCOUNTS_LIST not defined")
-        except Exception as e:
-            print(f"[MT5] Error loading accounts: {e}")
+        """Single account mode - account loaded from .env via settings."""
+        # Single account mode: no external accounts file needed
+        # Account credentials are loaded from .env in settings.py
+        pass
     
     def login_account(self, account: Dict) -> bool:
         """Login to a specific account."""

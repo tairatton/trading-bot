@@ -14,20 +14,38 @@ class Settings:
     BOT_NAME: str = "Prop Firm Bot"
     BOT_TYPE: str = "PROP_FIRM"  # PROP_FIRM or ORIGINAL
     
-    # MT5 Connection (Loaded from accounts.py)
-    try:
-        import sys
-        # Add parent directory to path to find accounts.py
-        sys.path.insert(0, str(Path(__file__).parent.parent.parent))
-        from accounts import MT5_LOGIN, MT5_PASSWORD, MT5_SERVER, MT5_PATH, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
-    except ImportError:
-        # Fallback to env or empty
-        MT5_LOGIN = int(os.getenv('MT5_LOGIN', '0'))
-        MT5_PASSWORD = os.getenv('MT5_PASSWORD', '')
-        MT5_SERVER = os.getenv('MT5_SERVER', 'Exness-MT5Real')
-        MT5_PATH = os.getenv('MT5_PATH', r"C:\Program Files\MetaTrader 5\terminal64.exe")
-        TELEGRAM_BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN', '')
-        TELEGRAM_CHAT_ID = os.getenv('TELEGRAM_CHAT_ID', '')
+    # MT5 Connection (Single Account from .env)
+    @staticmethod
+    def _find_mt5_path() -> str:
+        """Auto-detect MT5 terminal path."""
+        import os
+        from pathlib import Path
+        
+        # Common MT5 installation paths
+        possible_paths = [
+            # Default Roaming install (most common for Exness)
+            Path(os.getenv('APPDATA', '')) / "MetaTrader 5" / "terminal64.exe",
+            # Program Files installs
+            Path("C:/Program Files/MetaTrader 5/terminal64.exe"),
+            Path("C:/Program Files (x86)/MetaTrader 5/terminal64.exe"),
+            # Exness specific
+            Path(os.getenv('APPDATA', '')) / "Exness-MT5" / "terminal64.exe",
+        ]
+        
+        for path in possible_paths:
+            if path.exists():
+                return str(path)
+        
+        return ""  # Let MT5 use default if not found
+    
+    MT5_LOGIN: int = int(os.getenv('MT5_LOGIN', '0'))
+    MT5_PASSWORD: str = os.getenv('MT5_PASSWORD', '')
+    MT5_SERVER: str = os.getenv('MT5_SERVER', 'Exness-MT5Real')
+    MT5_PATH: str = os.getenv('MT5_PATH', '') or _find_mt5_path.__func__()
+    
+    # Telegram Settings (from .env)
+    TELEGRAM_BOT_TOKEN: str = os.getenv('TELEGRAM_BOT_TOKEN', '')
+    TELEGRAM_CHAT_ID: str = os.getenv('TELEGRAM_CHAT_ID', '')
     
     # Trading Parameters - Symbol Selection
     AVAILABLE_SYMBOLS = [
@@ -80,7 +98,7 @@ class Settings:
     SECRET_KEY: str = os.getenv('SECRET_KEY', 'change-this-secret')
     
     # Telegram (Optional)
-    # Token loaded above from accounts.py
+    # Telegram (Optional) - Loaded from .env
     ENABLE_SIGNAL_ALERTS: bool = os.getenv('ENABLE_SIGNAL_ALERTS', 'false').lower() == 'true'
     
     @classmethod
