@@ -7,6 +7,7 @@ import json
 from datetime import datetime
 from typing import Optional, List, Dict, Any
 import pandas as pd
+import math
 from config import settings
 from services.strategy import STRATEGY_PARAMS
 from services.telegram_service import telegram_service
@@ -167,7 +168,7 @@ class TradingService:
         lots = risk_amount / (sl_pips * pip_value_per_lot)
         
         # Round to 2 decimals, minimum 0.01, maximum 10.0
-        lots = max(0.01, min(10.0, round(lots, 2)))
+        lots = max(0.01, min(10.0, math.floor(lots * 100) / 100))
         
         logger.info(f"[{symbol}] Lot calc: Risk ${risk_amount:.2f}, SL {sl_pips:.1f} pips, PipVal ${pip_value_per_lot:.2f} => {lots} lots")
         
