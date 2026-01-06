@@ -2,6 +2,7 @@ from datetime import datetime
 from typing import Optional, Dict, Any, List
 import json
 import os
+import math
 from pathlib import Path
 from config import settings
 
@@ -367,6 +368,9 @@ class MT5Service:
                     sl: float = 0, tp: float = 0, comment: str = "") -> Dict[str, Any]:
         """Place a market order."""
         symbol = symbol or settings.SYMBOL
+        
+        # Double safety: Ensure volume is floored to 2 decimals
+        volume = math.floor(volume * 100) / 100
         
         # Get current price
         tick = mt5.symbol_info_tick(symbol)

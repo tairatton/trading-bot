@@ -24,6 +24,7 @@ import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
 from services.strategy import calculate_indicators, generate_signals
+from config import settings
 
 # PROP FIRM CONFIGURATION
 SYMBOLS = ["EURUSDm", "USDCADm", "USDJPYm"]  # 3 symbols like original
@@ -82,7 +83,7 @@ def run_propfirm_backtest():
     print(f"   Daily Loss Limit: {DAILY_LOSS_LIMIT*100}%")
     print("=" * 80)
     
-    if not mt5.initialize():
+    if not mt5.initialize(path=settings.MT5_PATH if settings.MT5_PATH else None):
         print("MT5 init failed")
         return
     

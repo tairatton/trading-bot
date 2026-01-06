@@ -732,7 +732,7 @@
                                 <td style="text-align: left; padding: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${deal.time}</td>
                                 <td style="text-align: left; padding: 8px; color: var(--accent); font-weight: 500;">${deal.symbol || '-'}</td>
                                 <td style="text-align: center; padding: 8px; color: ${deal.type === 'BUY' ? 'var(--accent-green)' : 'var(--accent-red)'}; font-weight: bold;">${deal.type}</td>
-                                <td style="text-align: right; padding: 8px;">${deal.volume}</td>
+                                <td style="text-align: right; padding: 8px;">${deal.volume.toFixed(2)}</td>
                                 <td style="text-align: right; padding: 8px;">${deal.price.toFixed(5)}</td>
                                 <td style="text-align: right; padding: 8px; color: ${profitColor}; font-weight: bold;">$${deal.profit.toFixed(2)}</td>
                             </tr>
