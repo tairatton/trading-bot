@@ -60,7 +60,7 @@ class TelegramService:
         emoji = "🟢" if trade_type.upper() == "BUY" else "🔴"
         acc_line = f"<b>Account:</b> {account_name}\n" if account_name else ""
         msg = f"""
-{emoji} <b>TRADE OPENED</b>
+{emoji} <b>TRADE OPENED ({settings.BOT_NAME})</b>
 
 {acc_line}<b>Symbol:</b> {clean_symbol}
 <b>Type:</b> {trade_type.upper()} ({signal_type})
@@ -81,7 +81,7 @@ class TelegramService:
         profit_sign = "+" if profit >= 0 else ""
         acc_line = f"<b>Account:</b> {account_name}\n" if account_name else ""
         msg = f"""
-{emoji} <b>TRADE CLOSED</b>
+{emoji} <b>TRADE CLOSED ({settings.BOT_NAME})</b>
 
 {acc_line}<b>Symbol:</b> {clean_symbol}
 <b>Type:</b> {trade_type.upper()}
@@ -108,7 +108,7 @@ class TelegramService:
         
         acc_line = f"<b>Account:</b> {account_id}\n" if account_id else ""
         msg = f"""
-🤖 <b>BOT STARTED</b>
+🤖 <b>BOT STARTED ({settings.BOT_NAME})</b>
 
 {acc_line}<b>Symbol:</b> {clean_symbols}
 <b>Risk:</b> {risk_percent}%
@@ -161,7 +161,7 @@ class TelegramService:
         
         clean_symbol = self._clean_symbol(symbol)
         msg = f"""
-{emoji} <b>SIGNAL DETECTED</b>
+{emoji} <b>SIGNAL DETECTED ({settings.BOT_NAME})</b>
 
 <b>Symbol:</b> {clean_symbol}
 <b>Signal:</b> {signal.upper()} ({signal_type})
