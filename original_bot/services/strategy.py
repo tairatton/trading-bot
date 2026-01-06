@@ -18,17 +18,17 @@ import ta
 STRATEGY_PARAMS = {
     "TREND": {
         "SL_ATR": 1.2,       # Stop Loss = 1.2 x ATR
-        "TP_ATR": 3.5,       # Take Profit = 3.5 x ATR
-        "TRAIL_START": 1.8,  # Start trailing after 1.8 x ATR profit
-        "TRAIL_DIST": 1.2,   # Trail distance = 1.2 x ATR
-        "MAX_BARS": 60       # Max bars in trade
+        "TP_ATR": 5.0,       # Take Profit = 5.0 x ATR (Moonshot)
+        "TRAIL_START": 1.2,  # Start trailing after 1.2 x ATR profit
+        "TRAIL_DIST": 0.6,   # Trail distance = 0.6 x ATR
+        "MAX_BARS": 50       # Max bars in trade
     },
     "MR": {
-        "SL_ATR": 1.0,
-        "TP_ATR": 2.5,
-        "TRAIL_START": 1.2,
-        "TRAIL_DIST": 0.8,
-        "MAX_BARS": 30
+        "SL_ATR": 0.8,
+        "TP_ATR": 3.0,       # Take Profit = 3.0 x ATR
+        "TRAIL_START": 0.64, # Start trailing after 0.64 x ATR
+        "TRAIL_DIST": 0.4,   # Trail distance = 0.4 x ATR
+        "MAX_BARS": 25       # Max bars in trade
     }
 }
 
@@ -111,14 +111,16 @@ def generate_signals(df: pd.DataFrame) -> pd.DataFrame:
         df["uptrend"] &
         (df["Low"] <= df["SMA_20"]) &
         (df["Close"] > df["SMA_20"]) &
-        (df["RSI"] > 40) & (df["RSI"] < 65)
+        (df["RSI"] > 40) & (df["RSI"] < 65) &
+        (df["ADX"] > 30)  # Optimization: Filter out weak trends (PF 1.48 -> 1.57)
     )
     
     df["trend_sell"] = (
         df["downtrend"] &
         (df["High"] >= df["SMA_20"]) &
         (df["Close"] < df["SMA_20"]) &
-        (df["RSI"] > 35) & (df["RSI"] < 60)
+        (df["RSI"] > 35) & (df["RSI"] < 60) &
+        (df["ADX"] > 30)  # Optimization: Filter out weak trends
     )
     
     # MEAN REVERSION

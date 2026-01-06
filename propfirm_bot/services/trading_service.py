@@ -519,9 +519,11 @@ class TradingService:
                             logger.info(f"TRAILING SELL: {current_sl} -> {new_sl}")
 
                 hours_held = (datetime.now() - track_info["entry_time"]).total_seconds() / 3600
-                if hours_held > 10.0:
+                # Dynamic time exit based on MAX_BARS (matches backtest)
+                max_hours = params["MAX_BARS"] * 0.5  # 30min bars = 0.5hr each
+                if hours_held > max_hours:
                     mt5_service.close_position(ticket)
-                    logger.info(f"TIME EXIT: Held {hours_held:.1f} hours")
+                    logger.info(f"TIME EXIT: Held {hours_held:.1f}hrs (Max: {max_hours}hrs)")
             except Exception as e:
                 logger.error(f"[MONITOR] Error: {e}")
 

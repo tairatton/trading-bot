@@ -20,16 +20,16 @@ import pandas as pd
 import numpy as np
 from services.strategy import calculate_indicators, generate_signals, STRATEGY_PARAMS
 
-SYMBOLS = ["EURUSDm", "USDCADm", "USDJPYm"]
+SYMBOLS = ["EURUSDm", "USDCADm", "USDCHFm"]
 INITIAL_BALANCE = 10000.0  # 10,000 THB for Exness Cent
-RISK_PER_TRADE = 0.005  # 0.5% per symbol (Target config)
+RISK_PER_TRADE = 0.01   # 1.0% per symbol (Target < 20% DD)
 
-# RR 1:2 Custom Params (tighter TP for higher win rate)
+# MOONSHOT Parameters (matches live bot and verified backtest)
 CUSTOM_PARAMS = {
-    "TREND": {"SL_ATR": 1.2, "TP_ATR": 2.4, "TRAIL_START": 1.5, "TRAIL_DIST": 1.0, "MAX_BARS": 60},
-    "MR": {"SL_ATR": 1.0, "TP_ATR": 2.0, "TRAIL_START": 1.0, "TRAIL_DIST": 0.7, "MAX_BARS": 30}
+    "TREND": {"SL_ATR": 1.2, "TP_ATR": 5.0, "TRAIL_START": 1.2, "TRAIL_DIST": 0.6, "MAX_BARS": 50},
+    "MR": {"SL_ATR": 0.8, "TP_ATR": 3.0, "TRAIL_START": 0.64, "TRAIL_DIST": 0.4, "MAX_BARS": 25}
 }
-USE_CUSTOM_PARAMS = False  # Set to False to use original STRATEGY_PARAMS
+USE_CUSTOM_PARAMS = False  # Uses STRATEGY_PARAMS from strategy.py (also Moonshot)
 
 # Trading Costs (Exness Cent Account)
 SPREAD_PIPS = {
@@ -97,6 +97,15 @@ def run_combined_backtest():
         print(f"    {len(df)} bars loaded")
     
     mt5.shutdown()
+    
+    # Save to cache for unified_comparison.py
+    try:
+        import pickle
+        with open("backtest_data_cache.pkl", "wb") as f:
+            pickle.dump(all_data, f)
+        print(f"[*] Data cached to backtest_data_cache.pkl")
+    except Exception as e:
+        print(f"[!] Failed to save cache: {e}")
     
     if len(all_data) < len(SYMBOLS):
         print("Not all symbols loaded")
