@@ -43,18 +43,27 @@ class TelegramService:
             logger.error(f"[Telegram] Error: {e}")
             return False
     
+    
+    def _clean_symbol(self, symbol: str) -> str:
+        """Remove broker suffixes from symbol (e.g. EURUSDm -> EURUSD)."""
+        import re
+        # Remove lowercase suffixes at the end
+        clean = re.sub(r'[a-z]+$', '', symbol)
+        return clean
+
     # ===== Trade Notifications =====
     
     def notify_trade_opened(self, symbol: str, trade_type: str, price: float, 
                            lots: float, sl: float, tp: float, signal_type: str = "",
                            account_name: str = ""):
         """Notify when a trade is opened."""
+        clean_symbol = self._clean_symbol(symbol)
         emoji = "🟢" if trade_type.upper() == "BUY" else "🔴"
         acc_line = f"<b>Account:</b> {account_name}\n" if account_name else ""
         msg = f"""
 {emoji} <b>TRADE OPENED</b>
 
-{acc_line}<b>Symbol:</b> {symbol}
+{acc_line}<b>Symbol:</b> {clean_symbol}
 <b>Type:</b> {trade_type.upper()} ({signal_type})
 <b>Price:</b> {price:.5f}
 <b>Lots:</b> {lots}
@@ -68,13 +77,14 @@ class TelegramService:
                            profit: float, reason: str = "",
                            account_name: str = ""):
         """Notify when a trade is closed."""
+        clean_symbol = self._clean_symbol(symbol)
         emoji = "✅" if profit >= 0 else "❌"
         profit_sign = "+" if profit >= 0 else ""
         acc_line = f"<b>Account:</b> {account_name}\n" if account_name else ""
         msg = f"""
 {emoji} <b>TRADE CLOSED</b>
 
-{acc_line}<b>Symbol:</b> {symbol}
+{acc_line}<b>Symbol:</b> {clean_symbol}
 <b>Type:</b> {trade_type.upper()}
 <b>Entry:</b> {entry_price:.5f}
 <b>Exit:</b> {exit_price:.5f}
@@ -94,11 +104,14 @@ class TelegramService:
     
     def notify_bot_started(self, symbol: str, risk_percent: float, account_id: str = ""):
         """Notify when bot starts."""
+        # Clean comma-separated symbols
+        clean_symbols = ", ".join([self._clean_symbol(s.strip()) for s in symbol.split(',')])
+        
         acc_line = f"<b>Account:</b> {account_id}\n" if account_id else ""
         msg = f"""
 🤖 <b>BOT STARTED</b>
 
-{acc_line}<b>Symbol:</b> {symbol}
+{acc_line}<b>Symbol:</b> {clean_symbols}
 <b>Risk:</b> {risk_percent}%
 <b>Status:</b> Running
 """
@@ -147,10 +160,11 @@ class TelegramService:
         if sl > 0 and tp > 0:
             sl_tp_text = f"\n<b>SL:</b> {sl:.5f}\n<b>TP:</b> {tp:.5f}"
         
+        clean_symbol = self._clean_symbol(symbol)
         msg = f"""
 {emoji} <b>SIGNAL DETECTED</b>
 
-<b>Symbol:</b> {symbol}
+<b>Symbol:</b> {clean_symbol}
 <b>Signal:</b> {signal.upper()} ({signal_type})
 <b>Strength:</b> {strength} ({strength_score}/100)
 <b>Price:</b> {price:.5f}{sl_tp_text}
@@ -161,6 +175,7 @@ class TelegramService:
             msg += f"\n<b>Factors:</b>\n{factors_text}"
         
         self.send_message(msg.strip())
+
 
 
 # Singleton instance
