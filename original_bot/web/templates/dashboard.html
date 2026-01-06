@@ -413,7 +413,15 @@
                             style="width: 100%; padding: 8px; background: var(--bg-secondary); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: 6px; font-size: 13px;">
                     </div>
 
-
+                    <div
+                        style="margin-bottom: 16px; display: flex; align-items: center; justify-content: space-between;">
+                        <label style="color: var(--text-secondary); font-size: 12px;">📱 Telegram Alerts</label>
+                        <label class="switch">
+                            <input type="checkbox" id="signalAlertsToggle" {% if settings.enable_signal_alerts
+                                %}checked{% endif %}>
+                            <span class="slider round"></span>
+                        </label>
+                    </div>
 
                     <style>
                         /* Toggle Switch CSS */
