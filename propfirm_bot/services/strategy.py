@@ -13,20 +13,20 @@ import ta
 
 
 # ============================================================
-# STRATEGY PARAMETERS
+# STRATEGY PARAMETERS (OPTIMIZED 2026-01-07)
 # ============================================================
 STRATEGY_PARAMS = {
     "TREND": {
         "SL_ATR": 1.2,       # Stop Loss = 1.2 x ATR
         "TP_ATR": 5.0,       # Take Profit = 5.0 x ATR (Moonshot)
-        "TRAIL_START": 1.2,  # Start trailing after 1.2 x ATR profit
+        "TRAIL_START": 1.0,  # Start trailing after 1.0 x ATR profit (was 1.2)
         "TRAIL_DIST": 0.6,   # Trail distance = 0.6 x ATR
         "MAX_BARS": 50       # Max bars in trade
     },
     "MR": {
         "SL_ATR": 0.8,       # Stop Loss = 0.8 x ATR
         "TP_ATR": 3.0,       # Take Profit = 3.0 x ATR (Moonshot)
-        "TRAIL_START": 0.64, # Start trailing after 0.64 x ATR
+        "TRAIL_START": 0.53, # Start trailing after 0.53 x ATR (was 0.64)
         "TRAIL_DIST": 0.4,   # Trail distance = 0.4 x ATR
         "MAX_BARS": 25       # Max bars in trade
     }
@@ -436,9 +436,12 @@ def run_backtest(
         row = df.iloc[i]
         current_time = df.index[i]
         price = row["Close"]
+        high = row["High"]
+        low = row["Low"]
         atr = row["ATR"]
         
-        # Exit logic
+        # Exit logic - using High/Low for realistic SL/TP simulation
+        # This catches intra-bar spikes that Close price misses
         if position is not None:
             bars_in_trade += 1
             exit_price = None
@@ -446,18 +449,20 @@ def run_backtest(
             params = STRATEGY_PARAMS[signal_type]
             
             if position == "buy":
-                highest = max(highest, price)
+                # Use High for trailing (best price during bar)
+                highest = max(highest, high)
                 
-                # Trailing stop
+                # Trailing stop - update based on highest price
                 if highest - entry_price > params["TRAIL_START"] * atr:
                     new_sl = highest - params["TRAIL_DIST"] * atr
                     stop_loss = max(stop_loss, new_sl)
                 
-                # Check exits
-                if price <= stop_loss:
+                # Check exits using Low (worst case for buy)
+                # Simulate intra-bar spike that hits SL
+                if low <= stop_loss:
                     exit_price = stop_loss
                     exit_reason = "SL"
-                elif price >= take_profit:
+                elif high >= take_profit:
                     exit_price = take_profit
                     exit_reason = "TP"
                 elif bars_in_trade >= params["MAX_BARS"]:
@@ -465,18 +470,20 @@ def run_backtest(
                     exit_reason = "TIME"
                     
             elif position == "sell":
-                lowest = min(lowest, price)
+                # Use Low for trailing (best price during bar)
+                lowest = min(lowest, low)
                 
-                # Trailing stop
+                # Trailing stop - update based on lowest price
                 if entry_price - lowest > params["TRAIL_START"] * atr:
                     new_sl = lowest + params["TRAIL_DIST"] * atr
                     stop_loss = min(stop_loss, new_sl)
                 
-                # Check exits
-                if price >= stop_loss:
+                # Check exits using High (worst case for sell)
+                # Simulate intra-bar spike that hits SL
+                if high >= stop_loss:
                     exit_price = stop_loss
                     exit_reason = "SL"
-                elif price <= take_profit:
+                elif low <= take_profit:
                     exit_price = take_profit
                     exit_reason = "TP"
                 elif bars_in_trade >= params["MAX_BARS"]:

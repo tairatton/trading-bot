@@ -24,7 +24,13 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent / "original_bot"))
 sys.path.insert(0, str(Path(__file__).parent / "propfirm_bot"))
 
-import MetaTrader5 as mt5
+try:
+    import MetaTrader5 as mt5
+    MT5_AVAILABLE = True
+except ImportError:
+    MT5_AVAILABLE = False
+    mt5 = None
+    
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
@@ -42,17 +48,17 @@ SYMBOLS = ["EURUSDm", "USDCADm", "USDCHFm"]
 INITIAL_BALANCE = 10000.0
 CACHE_FILE = Path(__file__).parent / "backtest_data_cache.pkl"
 
-# Bot configurations
+# Bot configurations (OPTIMIZED 2026-01-07)
 BOT_CONFIGS = {
     "Original Bot": {
-        "risk_per_trade": 0.01,   # 1.0% per trade
+        "risk_per_trade": 0.015,  # 1.5% per trade (was 1.0%)
         "color": "#2ecc71",       # Green
-        "label": "Original (1.0%)"
+        "label": "Original (1.5%)"
     },
     "Prop Firm Bot": {
-        "risk_per_trade": 0.003,  # 0.30% per trade
+        "risk_per_trade": 0.004,  # 0.4% per trade (was 0.3%)
         "color": "#3498db",       # Blue
-        "label": "PropFirm (0.30%)"
+        "label": "PropFirm (0.4%)"
     }
 }
 
@@ -79,8 +85,10 @@ def get_pip_value(symbol: str) -> float:
     """Get pip value multiplier."""
     return 1000 if "JPY" in symbol.upper() else 100000
 
-def fetch_data(symbol: str, timeframe=mt5.TIMEFRAME_M30, count=70000):
+def fetch_data(symbol: str, timeframe=None, count=70000):
     """Fetch OHLC data from MT5."""
+    if timeframe is None and MT5_AVAILABLE:
+        timeframe = mt5.TIMEFRAME_M30
     rates = mt5.copy_rates_from_pos(symbol, timeframe, 0, count)
     if rates is None:
         return pd.DataFrame()
@@ -101,6 +109,11 @@ def load_or_fetch_data():
         if all(symbol in all_data and "ATR" in all_data[symbol].columns for symbol in SYMBOLS):
             print(f"    Loaded {len(all_data)} symbols from cache")
             return all_data
+    
+    # Check if MT5 is available
+    if not MT5_AVAILABLE:
+        print("[!] MT5 not available and no cache found")
+        return None
     
     # Fetch from MT5
     print("[*] Fetching data from MT5...")
@@ -165,9 +178,11 @@ def run_backtest(all_data: dict, risk_per_trade: float) -> dict:
         for symbol in SYMBOLS:
             row = aligned_data[symbol].iloc[i]
             price = row["Close"]
+            high = row["High"]
+            low = row["Low"]
             atr = row["ATR"]
             
-            # Check exits
+            # Check exits - using High/Low for realistic SL/TP simulation
             if symbol in positions:
                 pos = positions[symbol]
                 pos["bars"] += 1
@@ -177,27 +192,31 @@ def run_backtest(all_data: dict, risk_per_trade: float) -> dict:
                 exit_reason = ""
                 
                 if pos["type"] == "buy":
-                    pos["highest"] = max(pos["highest"], price)
+                    # Use High for trailing (best price during bar)
+                    pos["highest"] = max(pos["highest"], high)
                     if pos["highest"] - pos["entry"] > params["TRAIL_START"] * atr:
                         new_sl = pos["highest"] - params["TRAIL_DIST"] * atr
                         pos["sl"] = max(pos["sl"], new_sl)
                     
-                    if price <= pos["sl"]:
+                    # Check exits using Low (worst case for buy)
+                    if low <= pos["sl"]:
                         exit_price, exit_reason = pos["sl"], "SL"
-                    elif price >= pos["tp"]:
+                    elif high >= pos["tp"]:
                         exit_price, exit_reason = pos["tp"], "TP"
                     elif pos["bars"] >= params["MAX_BARS"]:
                         exit_price, exit_reason = price, "TIME"
                 
                 elif pos["type"] == "sell":
-                    pos["lowest"] = min(pos["lowest"], price)
+                    # Use Low for trailing (best price during bar)
+                    pos["lowest"] = min(pos["lowest"], low)
                     if pos["entry"] - pos["lowest"] > params["TRAIL_START"] * atr:
                         new_sl = pos["lowest"] + params["TRAIL_DIST"] * atr
                         pos["sl"] = min(pos["sl"], new_sl)
                     
-                    if price >= pos["sl"]:
+                    # Check exits using High (worst case for sell)
+                    if high >= pos["sl"]:
                         exit_price, exit_reason = pos["sl"], "SL"
-                    elif price <= pos["tp"]:
+                    elif low <= pos["tp"]:
                         exit_price, exit_reason = pos["tp"], "TP"
                     elif pos["bars"] >= params["MAX_BARS"]:
                         exit_price, exit_reason = price, "TIME"

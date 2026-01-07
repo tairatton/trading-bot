@@ -62,7 +62,7 @@ class Settings:
     
     SYMBOL: str = os.getenv('SYMBOL', 'EURUSDm')  # Legacy: Default single symbol
     TIMEFRAME: str = os.getenv('TIMEFRAME', 'M30')
-    RISK_PERCENT: float = float(os.getenv('RISK_PERCENT', '1.0'))
+    RISK_PERCENT: float = float(os.getenv('RISK_PERCENT', '1.5'))  # Optimized: 2842% return, 19.5% DD
     SESSION_START_UTC: int = int(os.getenv('SESSION_START_UTC', '8'))
     SESSION_END_UTC: int = int(os.getenv('SESSION_END_UTC', '20'))
     
