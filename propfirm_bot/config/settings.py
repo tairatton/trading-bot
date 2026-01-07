@@ -55,14 +55,14 @@ class Settings:
         "BTCUSDm", "ETHUSDm",  # Crypto
     ]
     
-    # Active symbols for trading (Top 3 by Profit Factor)
-    # Supports trading multiple symbols with 1 order per symbol max
-    ACTIVE_SYMBOLS_STR: str = os.getenv('ACTIVE_SYMBOLS', 'EURUSDm,USDCADm,USDCHFm')
+    # Active symbols for trading - THE 5%ERS: Single Symbol Mode
+    # Trading 1 symbol at a time prevents compound daily losses
+    ACTIVE_SYMBOLS_STR: str = os.getenv('ACTIVE_SYMBOLS', 'EURUSDm')
     ACTIVE_SYMBOLS: list = [s.strip() for s in ACTIVE_SYMBOLS_STR.split(',') if s.strip()]
     
     SYMBOL: str = os.getenv('SYMBOL', 'EURUSDm')  # Legacy: Default single symbol
     TIMEFRAME: str = os.getenv('TIMEFRAME', 'M30')
-    RISK_PERCENT: float = float(os.getenv('RISK_PERCENT', '0.40'))  # Optimized: 482% return, 7.5% DD
+    RISK_PERCENT: float = float(os.getenv('RISK_PERCENT', '0.50'))  # Balanced: 9.34% DD, 41 days timeline
     SESSION_START_UTC: int = int(os.getenv('SESSION_START_UTC', '8'))
     SESSION_END_UTC: int = int(os.getenv('SESSION_END_UTC', '20'))
     
