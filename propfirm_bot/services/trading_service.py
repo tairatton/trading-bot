@@ -77,12 +77,7 @@ class TradingService:
     
 
     
-    def is_session_time(self, current_time: datetime) -> bool:
-        """Check if within trading session."""
-        hour_utc = current_time.hour
-        if current_time.weekday() >= 5:  # Weekend
-            return False
-        return settings.SESSION_START_UTC <= hour_utc < settings.SESSION_END_UTC
+
     
     def can_trade(self, current_time: datetime) -> tuple:
         """Check if trading is allowed. Using spread filter instead of news filter."""

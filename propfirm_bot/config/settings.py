@@ -63,8 +63,6 @@ class Settings:
     SYMBOL: str = os.getenv('SYMBOL', 'EURUSDm')  # Legacy: Default single symbol
     TIMEFRAME: str = os.getenv('TIMEFRAME', 'M30')
     RISK_PERCENT: float = float(os.getenv('RISK_PERCENT', '0.50'))  # Balanced: 9.34% DD, 41 days timeline
-    SESSION_START_UTC: int = int(os.getenv('SESSION_START_UTC', '8'))
-    SESSION_END_UTC: int = int(os.getenv('SESSION_END_UTC', '20'))
     
     # Weekend Safety: Close all trades on Friday to avoid gap risk
     CLOSE_ON_FRIDAY: bool = os.getenv('CLOSE_ON_FRIDAY', 'true').lower() == 'true'
