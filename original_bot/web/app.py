@@ -184,6 +184,9 @@ async def get_status():
         for deal in deals:
             today_pnl += deal.get("profit", 0)
 
+    # Get detailed metrics
+    dash_metrics = trading_service.get_dashboard_metrics(mt5_service)
+
     return {
         "bot_status": "running" if status["running"] else "paused" if status["paused"] else "stopped",
         "account": {
@@ -196,6 +199,7 @@ async def get_status():
         "trade_history": status["trade_history"],
         "account_count": 1 if mt5_service.connected else 0,
         "today_pnl": today_pnl,
+        "metrics": dash_metrics
     }
 
 

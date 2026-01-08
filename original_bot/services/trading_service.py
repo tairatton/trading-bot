@@ -64,6 +64,36 @@ class TradingService:
         # Error tracking for browser notification
         self.last_error: Optional[str] = None
         
+        # ========== DYNAMIC RISK (5-Tier Anti-Martingale) ==========
+        self.peak_balance: float = 0  # Track peak for DD calculation
+        self.dynamic_risk_config = {
+            "BASE_RISK": 0.50,  # 0.50% base
+            "TIERS": [
+                (3.0,  0.8),   # > 3%  DD -> 0.40%
+                (6.0,  0.6),   # > 6%  DD -> 0.30%
+                (9.0,  0.4),   # > 9%  DD -> 0.20%
+                (12.0, 0.2),   # > 12% DD -> 0.10%
+                (15.0, 0.1)    # > 15% DD -> 0.05%
+            ]
+        }
+        
+        # Daily Drawdown Reset Logic (Added per request)
+        # Limit set to 10% for Original Bot (Safety Net)
+        self.DAILY_LOSS_LIMIT: float = 10.0
+        self.daily_starting_balance: float = 0
+        self.last_daily_reset: Optional[datetime] = None
+        
+        # Persistence file for daily state (survives restarts)
+        self.DAILY_STATE_FILE: str = os.path.join(log_dir, "daily_state.json")
+        try:
+            self._load_daily_state()
+        except Exception:
+             pass # Method might not exist yet if running partial update, ignore
+             
+        # Max Drawdown Tracking (Lifetime/Session)
+        self.max_dd_abs: float = 0.0
+        self.max_dd_pct: float = 0.0
+             
         # News filter removed - using spread filter instead
     
 
@@ -76,11 +106,95 @@ class TradingService:
         # Session filter disabled - trade 24 hours (higher returns in backtest)
         return True, "OK"
     
+    def calculate_dynamic_risk(self, balance: float) -> float:
+        """Calculate risk percentage based on current drawdown (5-Tier Anti-Martingale).
+        
+        Returns risk as percentage (e.g., 0.50 for 0.50%).
+        """
+        # Update peak balance
+        if balance > self.peak_balance:
+            self.peak_balance = balance
+        
+        # Calculate current drawdown
+        if self.peak_balance <= 0:
+            return self.dynamic_risk_config["BASE_RISK"]
+        
+        dd_abs = self.peak_balance - balance
+        current_dd = (dd_abs / self.peak_balance) * 100
+        
+        # Update Max Drawdown Stats
+        metrics_changed = False
+        
+        if balance > self.peak_balance:
+            self.peak_balance = balance
+            metrics_changed = True
+            
+        if current_dd > self.max_dd_pct:
+            self.max_dd_pct = current_dd
+            metrics_changed = True
+            
+        if dd_abs > self.max_dd_abs:
+            self.max_dd_abs = dd_abs
+            metrics_changed = True
+            
+        if metrics_changed:
+            self._save_daily_state()
+        
+        # Apply tier logic
+        base_risk = self.dynamic_risk_config["BASE_RISK"]
+        multiplier = 1.0
+        
+        for threshold, mult in self.dynamic_risk_config["TIERS"]:
+            if current_dd > threshold:
+                multiplier = mult
+        
+        risk_percent = base_risk * multiplier
+        
+        logger.debug(f"[DYNAMIC RISK] DD: {current_dd:.2f}%, MaxDD: {self.max_dd_pct:.2f}%, Risk: {risk_percent:.2f}%")
+        return risk_percent
+    
     def get_last_error(self) -> Optional[str]:
         """Get and clear last error."""
         error = self.last_error
         self.last_error = None  # Clear after reading
         return error
+
+    def _load_daily_state(self) -> None:
+        """Load daily state from JSON file (for restart persistence)."""
+        try:
+            if os.path.exists(self.DAILY_STATE_FILE):
+                with open(self.DAILY_STATE_FILE, 'r') as f:
+                    state = json.load(f)
+                    
+                    # Load Daily Loss Stats
+                    self.daily_starting_balance = state.get("daily_starting_balance", 0)
+                    last_reset_str = state.get("last_daily_reset")
+                    if last_reset_str:
+                        self.last_daily_reset = datetime.fromisoformat(last_reset_str)
+                    
+                    # Load MaxDD Stats
+                    self.peak_balance = state.get("peak_balance", 0.0)
+                    self.max_dd_abs = state.get("max_dd_abs", 0.0)
+                    self.max_dd_pct = state.get("max_dd_pct", 0.0)
+                    
+                    logger.info(f"[STATE] Loaded stats: Peak=${self.peak_balance:.2f}, MaxDD=${self.max_dd_abs:.2f}")
+        except Exception as e:
+            logger.warning(f"[STATE] Failed to load state: {e}")
+
+    def _save_daily_state(self) -> None:
+        """Save daily state to JSON file."""
+        try:
+            state = {
+                "daily_starting_balance": self.daily_starting_balance,
+                "last_daily_reset": self.last_daily_reset.isoformat() if self.last_daily_reset else None,
+                "peak_balance": self.peak_balance,
+                "max_dd_abs": self.max_dd_abs,
+                "max_dd_pct": self.max_dd_pct
+            }
+            with open(self.DAILY_STATE_FILE, 'w') as f:
+                json.dump(state, f)
+        except Exception as e:
+            logger.warning(f"[STATE] Failed to save state: {e}")
     
     def calculate_position_size(self, balance: float, atr: float, signal_type: str, symbol: str = None, mt5_service = None) -> float:
         """Calculate position size based on risk.
@@ -94,7 +208,10 @@ class TradingService:
         from config import settings
         symbol = symbol or settings.SYMBOL
         
-        risk_amount = balance * (settings.RISK_PERCENT / 100)
+        # Calculate DYNAMIC risk based on current DD
+        risk_percent = self.calculate_dynamic_risk(balance)
+        risk_amount = balance * (risk_percent / 100)
+        
         sl_atr = STRATEGY_PARAMS[signal_type]["SL_ATR"]
         sl_distance = atr * sl_atr
         
@@ -383,11 +500,23 @@ class TradingService:
         
         # Track last signal per symbol to avoid duplicate alerts
         last_signals = {}
+        last_dashboard_time = datetime.min
         
         while self.running:
             if self.paused:
                 time.sleep(5)
                 continue
+            
+            # ---------------------------------------------------------
+            # DASHBOARD PERIODIC UPDATE (Every 1 Hour)
+            # ---------------------------------------------------------
+            if (datetime.now() - last_dashboard_time).total_seconds() > 3600:
+                try:
+                    metrics = self.get_dashboard_metrics(mt5_service)
+                    telegram_service.notify_dashboard(metrics)
+                    last_dashboard_time = datetime.now()
+                except Exception as e:
+                    logger.error(f"[DASHBOARD] Error sending update: {e}")
             
             try:
                 # Ensure MT5 connection is alive (auto reconnect if needed)
@@ -395,6 +524,10 @@ class TradingService:
                     print("[BOT] MT5 connection failed, waiting 60 seconds...")
                     time.sleep(60)
                     continue
+                
+                # Check metrics & Save state if balance changed (Order Closed)
+                current_balance = mt5_service.get_account_info().get("balance", 0)
+                self.calculate_dynamic_risk(current_balance)
 
                 # =========================================================
                 # WEEKEND SAFETY MODE (Friday Force Close)
@@ -554,6 +687,37 @@ class TradingService:
             "stats": self.stats,
             "last_signal_time": self.last_signal_time.isoformat() if self.last_signal_time else None,
             "trade_history": self.trade_history[-10:]  # Last 10 trades
+        }
+        
+    def get_dashboard_metrics(self, mt5_service) -> Dict:
+        """Get detailed dashboard metrics including MaxDD and Fees."""
+        account = mt5_service.get_account_info()
+        balance = account.get("balance", 0.0)
+        equity = account.get("equity", 0.0)
+        profit = account.get("profit", 0.0)
+        
+        fees = mt5_service.get_daily_fees()
+        
+        # Calculate current DD stats (if not already updated by risk calc)
+        if self.peak_balance > 0:
+            current_dd_abs = self.peak_balance - balance
+            current_dd_pct = (current_dd_abs / self.peak_balance) * 100
+        else:
+            current_dd_abs = 0.0
+            current_dd_pct = 0.0
+            
+        return {
+            "balance": balance,
+            "equity": equity,
+            "profit": profit,
+            "peak_balance": self.peak_balance,
+            "current_dd_abs": current_dd_abs,
+            "current_dd_pct": current_dd_pct,
+            "max_dd_abs": self.max_dd_abs,
+            "max_dd_pct": self.max_dd_pct,
+            "fees_commission": fees.get("commission", 0.0),
+            "fees_swap": fees.get("swap", 0.0),
+            "fees_total": fees.get("total", 0.0)
         }
 
 

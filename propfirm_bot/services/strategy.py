@@ -17,14 +17,14 @@ import ta
 # ============================================================
 STRATEGY_PARAMS = {
     "TREND": {
-        "SL_ATR": 1.2,       # Stop Loss = 1.2 x ATR
+        "SL_ATR": 1.5,       # Stop Loss = 1.5 x ATR (Optimized for <10% DD)
         "TP_ATR": 5.0,       # Take Profit = 5.0 x ATR (Moonshot)
         "TRAIL_START": 1.0,  # Start trailing after 1.0 x ATR profit (was 1.2)
         "TRAIL_DIST": 0.6,   # Trail distance = 0.6 x ATR
         "MAX_BARS": 50       # Max bars in trade
     },
     "MR": {
-        "SL_ATR": 0.8,       # Stop Loss = 0.8 x ATR
+        "SL_ATR": 0.6,       # Stop Loss = 0.6 x ATR (Optimized for <10% DD)
         "TP_ATR": 3.0,       # Take Profit = 3.0 x ATR (Moonshot)
         "TRAIL_START": 0.53, # Start trailing after 0.53 x ATR (was 0.64)
         "TRAIL_DIST": 0.4,   # Trail distance = 0.4 x ATR

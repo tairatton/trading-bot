@@ -565,6 +565,36 @@ class MT5Service:
             "message": f"Closed {closed_count}, Failed {failed_count}"
         }
 
+    def get_daily_fees(self) -> Dict[str, float]:
+        """Get total fees (commission + swap) for today (Closed Deals + Open Positions)."""
+        if not self.connected:
+            return {"commission": 0.0, "swap": 0.0, "total": 0.0}
+            
+        total_commission = 0.0
+        total_swap = 0.0
+        
+        # 1. Fees from Open Positions (Accumulated Swap)
+        positions = mt5.positions_get()
+        if positions:
+            for pos in positions:
+                total_swap += pos.swap
+        
+        # 2. Fees from Closed Deals (Today)
+        now = datetime.now()
+        start_of_day = datetime(now.year, now.month, now.day)
+        
+        deals = mt5.history_deals_get(start_of_day, now)
+        if deals:
+            for deal in deals:
+                total_commission += deal.commission
+                total_swap += deal.swap
+                
+        return {
+            "commission": total_commission,
+            "swap": total_swap,
+            "total": total_commission + total_swap
+        }
+
 
 # Singleton instance
 mt5_service = MT5Service()

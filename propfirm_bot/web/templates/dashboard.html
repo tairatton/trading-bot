@@ -353,6 +353,20 @@
                     <span class="stat-label">Closed P/L</span>
                     <span class="stat-value" id="todayPL">--</span>
                 </div>
+                <!-- New Risk Metrics -->
+                <div class="stat-row"
+                    style="margin-top: 10px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 8px;">
+                    <span class="stat-label" style="color: var(--accent-red);">Current DD</span>
+                    <span class="stat-value" id="currentDD">--</span>
+                </div>
+                <div class="stat-row">
+                    <span class="stat-label" style="color: var(--accent-red);">Max DD</span>
+                    <span class="stat-value" id="maxDD">--</span>
+                </div>
+                <div class="stat-row" style="margin-top: 5px;">
+                    <span class="stat-label">Fees (Today)</span>
+                    <span class="stat-value" id="feesTotal">--</span>
+                </div>
 
             </div>
 
@@ -407,10 +421,13 @@
                 <form class="settings-form" onsubmit="updateSettings(event)">
                     <div style="margin-bottom: 12px;">
                         <label
-                            style="color: var(--text-secondary); font-size: 12px; margin-bottom: 4px; display: block;">Risk
-                            (%)</label>
-                        <input type="number" id="riskPercent" step="0.1" value="{{ settings.risk_percent }}"
-                            style="width: 100%; padding: 8px; background: var(--bg-secondary); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: 6px; font-size: 13px;">
+                            style="color: var(--text-secondary); font-size: 12px; margin-bottom: 4px; display: flex; justify-content: space-between;">
+                            Risk (%)
+                            <span
+                                style="background: rgba(0,212,255,0.15); color: var(--accent); padding: 2px 6px; border-radius: 4px; font-size: 10px;">DYNAMIC</span>
+                        </label>
+                        <input type="text" id="riskPercent" value="Dynamic (Auto)" readonly
+                            style="width: 100%; padding: 8px; background: rgba(0,0,0,0.3); color: var(--text-secondary); border: 1px solid rgba(255,255,255,0.1); border-radius: 6px; font-size: 13px; cursor: not-allowed;">
                     </div>
 
                     <div
@@ -603,6 +620,31 @@
                 if (todayEl) {
                     todayEl.textContent = '$' + (todayPnl > 0 ? '+' : '') + todayPnl.toFixed(2) + ' (' + todayPercent.toFixed(2) + '%)';
                     todayEl.className = 'stat-value ' + (todayPnl > 0 ? 'positive' : todayPnl < 0 ? 'negative' : '');
+                }
+
+                // Update Risk Metrics
+                if (status.metrics) {
+                    // Current DD
+                    const currDD = status.metrics.current_dd_abs || 0;
+                    const currDDPct = status.metrics.current_dd_pct || 0;
+                    document.getElementById('currentDD').textContent = '$' + currDD.toFixed(2) + ' (' + currDDPct.toFixed(2) + '%)';
+
+                    // Max DD
+                    const maxDD = status.metrics.max_dd_abs || 0;
+                    const maxDDPct = status.metrics.max_dd_pct || 0;
+                    document.getElementById('maxDD').textContent = '$' + maxDD.toFixed(2) + ' (' + maxDDPct.toFixed(2) + '%)';
+
+                    // Fees
+                    const totalFees = status.metrics.fees_total || 0;
+                    document.getElementById('feesTotal').textContent = '$' + totalFees.toFixed(2);
+
+                    // Update Dynamic Risk Display
+                    if (status.metrics.current_risk !== undefined) {
+                        const riskInput = document.getElementById('riskPercent');
+                        if (riskInput) {
+                            riskInput.value = status.metrics.current_risk.toFixed(3) + '% (Auto)';
+                        }
+                    }
                 }
 
                 // Reset error count on success

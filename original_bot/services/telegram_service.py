@@ -138,6 +138,42 @@ class TelegramService:
 <b>Balance:</b> ${balance:.2f}
 """
         self.send_message(msg.strip())
+        
+    def notify_dashboard(self, metrics: dict):
+        """Send detailed dashboard status."""
+        balance = metrics.get('balance', 0)
+        equity = metrics.get('equity', 0)
+        profit = metrics.get('profit', 0)
+        
+        current_dd_abs = metrics.get('current_dd_abs', 0)
+        current_dd_pct = metrics.get('current_dd_pct', 0)
+        max_dd_abs = metrics.get('max_dd_abs', 0)
+        max_dd_pct = metrics.get('max_dd_pct', 0)
+        
+        fees_comm = metrics.get('fees_commission', 0)
+        fees_swap = metrics.get('fees_swap', 0)
+        fees_total = metrics.get('fees_total', 0)
+        
+        profit_emoji = "🟢" if profit >= 0 else "🔴"
+        
+        msg = f"""
+📊 <b>LIVE DASHBOARD ({settings.BOT_NAME})</b>
+
+💰 <b>Account Info</b>
+<b>Balance:</b> ${balance:,.2f}
+<b>Equity:</b> ${equity:,.2f}
+<b>Open P/L:</b> {profit_emoji} ${profit:,.2f}
+
+📉 <b>Drawdown Stats</b>
+<b>Current DD:</b> ${current_dd_abs:,.2f} ({current_dd_pct:.2f}%)
+<b>Max DD:</b> ${max_dd_abs:,.2f} ({max_dd_pct:.2f}%)
+
+💸 <b>Fees (Today)</b>
+<b>Commission:</b> ${fees_comm:,.2f}
+<b>Swap:</b> ${fees_swap:,.2f}
+<b>Total Fees:</b> ${fees_total:,.2f}
+"""
+        self.send_message(msg.strip())
     
     def notify_signal_detected(self, symbol: str, signal: str, signal_type: str,
                                price: float, rsi: float = 0, adx: float = 0,

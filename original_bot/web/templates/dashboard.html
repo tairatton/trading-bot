@@ -353,6 +353,20 @@
                     <span class="stat-label">Closed P/L</span>
                     <span class="stat-value" id="todayPL">--</span>
                 </div>
+                <!-- New Risk Metrics -->
+                <div class="stat-row"
+                    style="margin-top: 10px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 8px;">
+                    <span class="stat-label" style="color: var(--accent-red);">Current DD</span>
+                    <span class="stat-value" id="currentDD">--</span>
+                </div>
+                <div class="stat-row">
+                    <span class="stat-label" style="color: var(--accent-red);">Max DD</span>
+                    <span class="stat-value" id="maxDD">--</span>
+                </div>
+                <div class="stat-row" style="margin-top: 5px;">
+                    <span class="stat-label">Fees (Today)</span>
+                    <span class="stat-value" id="feesTotal">--</span>
+                </div>
 
             </div>
 
@@ -603,6 +617,23 @@
                 if (todayEl) {
                     todayEl.textContent = '$' + (todayPnl > 0 ? '+' : '') + todayPnl.toFixed(2) + ' (' + todayPercent.toFixed(2) + '%)';
                     todayEl.className = 'stat-value ' + (todayPnl > 0 ? 'positive' : todayPnl < 0 ? 'negative' : '');
+                }
+
+                // Update Risk Metrics
+                if (status.metrics) {
+                    // Current DD
+                    const currDD = status.metrics.current_dd_abs || 0;
+                    const currDDPct = status.metrics.current_dd_pct || 0;
+                    document.getElementById('currentDD').textContent = '$' + currDD.toFixed(2) + ' (' + currDDPct.toFixed(2) + '%)';
+
+                    // Max DD
+                    const maxDD = status.metrics.max_dd_abs || 0;
+                    const maxDDPct = status.metrics.max_dd_pct || 0;
+                    document.getElementById('maxDD').textContent = '$' + maxDD.toFixed(2) + ' (' + maxDDPct.toFixed(2) + '%)';
+
+                    // Fees
+                    const totalFees = status.metrics.fees_total || 0;
+                    document.getElementById('feesTotal').textContent = '$' + totalFees.toFixed(2);
                 }
 
                 // Reset error count on success
