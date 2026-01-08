@@ -353,6 +353,9 @@ class TradingService:
             sl = price + sl_distance
             tp = price - tp_distance
         
+        # Calculate DYNAMIC risk for notification
+        risk_percent = self.calculate_dynamic_risk(balance)
+        
         # Place order
         logger.info(f"[{symbol}] PLACING ORDER: {signal.upper()} {lots} lots @ {price:.5f}")
         result = mt5_service.place_order(
@@ -379,7 +382,7 @@ class TradingService:
             logger.info(f"ORDER SUCCESS: {signal.upper()} @ {result.get('price'):.5f}, ID={result.get('order_id')}")
             self.stats["last_action"] = f"OPENED {signal.upper()} @ {result.get('price'):.5f}"
             
-            # Send Telegram notification
+            # Send Telegram notification (includes dynamic risk %)
             telegram_service.notify_trade_opened(
                 symbol=symbol,
                 trade_type=signal,
@@ -388,7 +391,8 @@ class TradingService:
                 sl=sl,
                 tp=tp,
                 signal_type=signal_type,
-                account_name=account_name
+                account_name=account_name,
+                risk_percent=risk_percent
             )
             
             return {"action": "opened", "result": result}
@@ -510,13 +514,16 @@ class TradingService:
             # ---------------------------------------------------------
             # DASHBOARD PERIODIC UPDATE (Every 1 Hour)
             # ---------------------------------------------------------
-            if (datetime.now() - last_dashboard_time).total_seconds() > 3600:
-                try:
-                    metrics = self.get_dashboard_metrics(mt5_service)
-                    telegram_service.notify_dashboard(metrics)
-                    last_dashboard_time = datetime.now()
-                except Exception as e:
-                    logger.error(f"[DASHBOARD] Error sending update: {e}")
+            # ---------------------------------------------------------
+            # DASHBOARD PERIODIC UPDATE (Disabled by user)
+            # ---------------------------------------------------------
+            # if (datetime.now() - last_dashboard_time).total_seconds() > 3600:
+            #     try:
+            #         metrics = self.get_dashboard_metrics(mt5_service)
+            #         telegram_service.notify_dashboard(metrics)
+            #         last_dashboard_time = datetime.now()
+            #     except Exception as e:
+            #         logger.error(f"[DASHBOARD] Error sending update: {e}")
             
             try:
                 # Ensure MT5 connection is alive (auto reconnect if needed)
@@ -717,7 +724,8 @@ class TradingService:
             "max_dd_pct": self.max_dd_pct,
             "fees_commission": fees.get("commission", 0.0),
             "fees_swap": fees.get("swap", 0.0),
-            "fees_total": fees.get("total", 0.0)
+            "fees_total": fees.get("total", 0.0),
+            "current_risk": self.calculate_dynamic_risk(balance)
         }
 
 

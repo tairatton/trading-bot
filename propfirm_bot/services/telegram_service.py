@@ -55,11 +55,13 @@ class TelegramService:
     
     def notify_trade_opened(self, symbol: str, trade_type: str, price: float, 
                            lots: float, sl: float, tp: float, signal_type: str = "",
-                           account_name: str = ""):
+                           account_name: str = "", risk_percent: float = 0.0):
         """Notify when a trade is opened."""
         clean_symbol = self._clean_symbol(symbol)
         emoji = "🟢" if trade_type.upper() == "BUY" else "🔴"
         acc_line = f"<b>Account:</b> {account_name}\n" if account_name else ""
+        risk_line = f"<b>Risk:</b> {risk_percent:.2f}%" if risk_percent > 0 else ""
+        
         msg = f"""
 {emoji} <b>TRADE OPENED ({settings.BOT_NAME})</b>
 
@@ -69,6 +71,7 @@ class TelegramService:
 <b>Lots:</b> {lots}
 <b>SL:</b> {sl:.5f}
 <b>TP:</b> {tp:.5f}
+{risk_line}
 """
         self.send_message(msg.strip())
     

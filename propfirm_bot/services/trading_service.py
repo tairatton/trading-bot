@@ -474,18 +474,21 @@ class TradingService:
         # Calculate risk from new position
         params = STRATEGY_PARAMS[signal_type]
         sl_distance = atr * params["SL_ATR"]
-        new_position_risk = balance * (settings.RISK_PERCENT / 100)
+        
+        # Calculate DYNAMIC risk for pre-trade check
+        risk_percent = self.calculate_dynamic_risk(balance)
+        new_position_risk = balance * (risk_percent / 100)
         
         # Total risk if we open this position
         total_risk = existing_risk + new_position_risk
         total_risk_pct = (total_risk / current_equity) * 100
         
-        # Check if total risk exceeds 4.1%
+        # Check if total risk exceeds limit (5% target for Prop Firm)
         MAX_TOTAL_RISK_PCT = 4.1
         if total_risk_pct > MAX_TOTAL_RISK_PCT:
             logger.warning(f"[{symbol}] PRE-TRADE RISK BLOCK: Total risk {total_risk_pct:.2f}% > {MAX_TOTAL_RISK_PCT}%")
             logger.warning(f"  Existing risk: ${existing_risk:.2f} ({existing_risk/current_equity*100:.2f}%)")
-            logger.warning(f"  New position risk: ${new_position_risk:.2f} ({new_position_risk/current_equity*100:.2f}%)")
+            logger.warning(f"  New position risk (Risk {risk_percent:.2f}%): ${new_position_risk:.2f} ({new_position_risk/current_equity*100:.2f}%)")
             self.stats["last_action"] = f"BLOCKED: Total risk {total_risk_pct:.1f}% > {MAX_TOTAL_RISK_PCT}%"
             
             # Send Telegram warning
@@ -493,7 +496,7 @@ class TradingService:
                 f"⚠️ Trade Blocked - Risk Protection\n\n"
                 f"Symbol: {symbol}\n"
                 f"Existing risk: ${existing_risk:.0f} ({existing_risk/current_equity*100:.1f}%)\n"
-                f"New position: ${new_position_risk:.0f} ({new_position_risk/current_equity*100:.1f}%)\n"
+                f"New position (Risk {risk_percent:.2f}%): ${new_position_risk:.0f} ({new_position_risk/current_equity*100:.1f}%)\n"
                 f"Total: {total_risk_pct:.1f}% > {MAX_TOTAL_RISK_PCT}% limit"
             )
             
@@ -541,7 +544,7 @@ class TradingService:
             logger.info(f"ORDER SUCCESS: {signal.upper()} @ {result.get('price'):.5f}, ID={result.get('order_id')}")
             self.stats["last_action"] = f"OPENED {signal.upper()} @ {result.get('price'):.5f}"
             
-            # Send Telegram notification
+            # Send Telegram notification (includes dynamic risk %)
             telegram_service.notify_trade_opened(
                 symbol=symbol,
                 trade_type=signal,
@@ -550,7 +553,8 @@ class TradingService:
                 sl=sl,
                 tp=tp,
                 signal_type=signal_type,
-                account_name=account_name
+                account_name=account_name,
+                risk_percent=risk_percent
             )
             
             return {"action": "opened", "result": result}
@@ -672,13 +676,16 @@ class TradingService:
             # ---------------------------------------------------------
             # DASHBOARD PERIODIC UPDATE (Every 1 Hour)
             # ---------------------------------------------------------
-            if (datetime.now() - last_dashboard_time).total_seconds() > 3600:
-                try:
-                    metrics = self.get_dashboard_metrics(mt5_service)
-                    telegram_service.notify_dashboard(metrics)
-                    last_dashboard_time = datetime.now()
-                except Exception as e:
-                    logger.error(f"[DASHBOARD] Error sending update: {e}")
+            # ---------------------------------------------------------
+            # DASHBOARD PERIODIC UPDATE (Disabled by user)
+            # ---------------------------------------------------------
+            # if (datetime.now() - last_dashboard_time).total_seconds() > 3600:
+            #     try:
+            #         metrics = self.get_dashboard_metrics(mt5_service)
+            #         telegram_service.notify_dashboard(metrics)
+            #         last_dashboard_time = datetime.now()
+            #     except Exception as e:
+            #         logger.error(f"[DASHBOARD] Error sending update: {e}")
             
             try:
                 # Ensure MT5 connection is alive (auto reconnect if needed)
