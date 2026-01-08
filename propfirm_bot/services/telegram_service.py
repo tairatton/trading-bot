@@ -105,7 +105,7 @@ class TelegramService:
 """
         self.send_message(msg.strip())
     
-    def notify_bot_started(self, symbol: str, risk_percent: float, account_id: str = ""):
+    def notify_bot_started(self, symbol: str, account_id: str = ""):
         """Notify when bot starts."""
         # Clean comma-separated symbols
         clean_symbols = ", ".join([self._clean_symbol(s.strip()) for s in symbol.split(',')])
@@ -115,7 +115,6 @@ class TelegramService:
 🤖 <b>BOT STARTED ({settings.BOT_NAME})</b>
 
 {acc_line}<b>Symbol:</b> {clean_symbols}
-<b>Risk:</b> {risk_percent}%
 <b>Status:</b> Running
 """
         self.send_message(msg.strip())

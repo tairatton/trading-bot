@@ -835,7 +835,8 @@ class TradingService:
         
         # Send Telegram notification
         symbols_str = ', '.join(settings.ACTIVE_SYMBOLS)
-        telegram_service.notify_bot_started(symbols_str, settings.RISK_PERCENT, str(settings.MT5_LOGIN))
+        print(f"[TELEGRAM] Sending Bot Started notification...")
+        telegram_service.notify_bot_started(symbols_str, str(settings.MT5_LOGIN))
         
         return {"success": True, "message": "Bot started"}
     
