@@ -717,38 +717,6 @@ class TradingService:
             "trade_history": self.trade_history[-10:]  # Last 10 trades
         }
         
-    def get_dashboard_metrics(self, mt5_service) -> Dict:
-        """Get detailed dashboard metrics including MaxDD and Fees."""
-        account = mt5_service.get_account_info()
-        balance = account.get("balance", 0.0)
-        equity = account.get("equity", 0.0)
-        profit = account.get("profit", 0.0)
-        
-        fees = mt5_service.get_daily_fees()
-        
-        # Calculate current DD stats (if not already updated by risk calc)
-        if self.peak_balance > 0:
-            current_dd_abs = self.peak_balance - balance
-            current_dd_pct = (current_dd_abs / self.peak_balance) * 100
-        else:
-            current_dd_abs = 0.0
-            current_dd_pct = 0.0
-            
-        return {
-            "balance": balance,
-            "equity": equity,
-            "profit": profit,
-            "peak_balance": self.peak_balance,
-            "current_dd_abs": current_dd_abs,
-            "current_dd_pct": current_dd_pct,
-            "max_dd_abs": self.max_dd_abs,
-            "max_dd_pct": self.max_dd_pct,
-            "fees_commission": fees.get("commission", 0.0),
-            "fees_swap": fees.get("swap", 0.0),
-            "fees_total": fees.get("total", 0.0),
-            "current_risk": self.calculate_dynamic_risk(balance)
-        }
-
 
 # Singleton instance
 trading_service = TradingService()

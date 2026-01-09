@@ -184,22 +184,18 @@ async def get_status():
         for deal in deals:
             today_pnl += deal.get("profit", 0)
 
-    # Get detailed metrics
-    dash_metrics = trading_service.get_dashboard_metrics(mt5_service)
-
     return {
         "bot_status": "running" if status["running"] else "paused" if status["paused"] else "stopped",
         "account": {
             "balance": mt5_info.get("balance", 0),
             "equity": mt5_info.get("equity", 0),
             "profit": mt5_info.get("profit", 0),
-            "currency": mt5_info.get("currency", "USD"),
+            "currency": "USD",
+            "account_count": 1 if mt5_service.connected else 0
         },
         "stats": status["stats"],
         "trade_history": status["trade_history"],
-        "account_count": 1 if mt5_service.connected else 0,
-        "today_pnl": today_pnl,
-        "metrics": dash_metrics
+        "today_pnl": today_pnl
     }
 
 
