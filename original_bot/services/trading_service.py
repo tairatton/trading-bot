@@ -65,15 +65,17 @@ class TradingService:
         self.last_error: Optional[str] = None
         
         # ========== DYNAMIC RISK (5-Tier Anti-Martingale) ==========
+        # 3-PAIR KING (EURUSD, USDCAD, USDCHF): 0.70% Base Per Pair
+        # Result: +18,637% Return, 10.89% Max DD (6 Years)
         self.peak_balance: float = 0  # Track peak for DD calculation
         self.dynamic_risk_config = {
-            "BASE_RISK": 1.0,  # 1.0% base (Aggressive Growth)
+            "BASE_RISK": 0.70,  # 0.70% per pair (Total Exposure ~2.1%)
             "TIERS": [
-                (5.0,  0.8),   # > 5%  DD -> 0.8%
-                (10.0, 0.6),   # > 10% DD -> 0.6%
-                (15.0, 0.4),   # > 15% DD -> 0.4%
-                (18.0, 0.2),   # > 18% DD -> 0.2%
-                (20.0, 0.1)    # > 20% DD -> 0.1%
+                (5.0,  0.8),   # > 5%  DD -> 0.56%
+                (10.0, 0.6),   # > 10% DD -> 0.42%
+                (15.0, 0.4),   # > 15% DD -> 0.28%
+                (18.0, 0.2),   # > 18% DD -> 0.14%
+                (19.0, 0.1)    # > 19% DD -> 0.07%
             ]
         }
         

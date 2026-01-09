@@ -34,7 +34,9 @@ def run_backtest(
     risk_per_trade: float = 0.02,
     pip_value: float = 0.0001,
     use_dynamic_risk: bool = False,
-    risk_tiers: list = None
+    risk_tiers: list = None,
+    daily_loss_limit: float = None,  # e.g., 4.1 for 4.1% daily loss limit
+    spread_pips: float = 0.0  # Spread in pips to simulate (e.g., 1.5 pips)
 ) -> dict:
     """
     Run backtest with trailing stop.
@@ -68,6 +70,15 @@ def run_backtest(
     signal_type = ""
     entry_time = None
     
+    # Daily Loss Limit Tracking
+    daily_start_balance = initial_balance
+    current_day = None
+    daily_loss_blocked = False
+    max_daily_dd_pct = 0.0
+    
+    # Convert spread from pips to price (for standard forex)
+    spread_price = spread_pips * pip_value
+    
     # Start after warmup period for indicators
     start_idx = min(250, len(df) // 10)
     
@@ -78,6 +89,24 @@ def run_backtest(
         high = row["High"]
         low = row["Low"]
         atr = row["ATR"]
+        
+        # ========== DAILY LOSS LIMIT CHECK ==========
+        bar_day = current_time.date() if hasattr(current_time, 'date') else current_time
+        
+        # Reset daily tracking on new day
+        if current_day != bar_day:
+            current_day = bar_day
+            daily_start_balance = balance
+            daily_loss_blocked = False
+        
+        # Check if daily loss limit exceeded
+        if daily_loss_limit is not None:
+            daily_loss_pct = ((daily_start_balance - balance) / daily_start_balance * 100) if daily_start_balance > 0 else 0
+            if daily_loss_pct > max_daily_dd_pct:
+                max_daily_dd_pct = daily_loss_pct
+            if daily_loss_pct >= daily_loss_limit:
+                daily_loss_blocked = True
+        # ============================================
         
         # Update peak balance for dynamic risk
         if balance > peak_balance:
@@ -241,8 +270,8 @@ def run_backtest(
                     
                 continue  # Skip normal exit/entry logic for this bar
         
-        # Entry logic
-        if position is None:
+        # Entry logic (skip if daily loss limit hit)
+        if position is None and not daily_loss_blocked:
             current_risk_pct = calculate_dynamic_risk(balance, peak_balance, risk_per_trade, risk_tiers) if use_dynamic_risk else risk_per_trade
             risk_amount = balance * current_risk_pct
 
@@ -253,12 +282,12 @@ def run_backtest(
                 
                 if sl_dist > 0:
                     position = "buy"
-                    entry_price = price
-                    stop_loss = price - sl_dist
-                    take_profit = price + atr * params["TP_ATR"]
+                    entry_price = price + spread_price  # Add spread for buy (pay ask)
+                    stop_loss = entry_price - sl_dist
+                    take_profit = entry_price + atr * params["TP_ATR"]
                     position_size = risk_amount / (sl_dist * 100000)
                     position_size = max(0.01, min(position_size, 10.0))
-                    highest = price
+                    highest = entry_price
                     bars_in_trade = 0
                     entry_time = current_time
                     
@@ -269,12 +298,12 @@ def run_backtest(
                 
                 if sl_dist > 0:
                     position = "buy"
-                    entry_price = price
-                    stop_loss = price - sl_dist
-                    take_profit = price + atr * params["TP_ATR"]
+                    entry_price = price + spread_price  # Add spread for buy
+                    stop_loss = entry_price - sl_dist
+                    take_profit = entry_price + atr * params["TP_ATR"]
                     position_size = risk_amount / (sl_dist * 100000)
                     position_size = max(0.01, min(position_size, 10.0))
-                    highest = price
+                    highest = entry_price
                     bars_in_trade = 0
                     entry_time = current_time
                     
@@ -285,12 +314,12 @@ def run_backtest(
                 
                 if sl_dist > 0:
                     position = "sell"
-                    entry_price = price
-                    stop_loss = price + sl_dist
-                    take_profit = price - atr * params["TP_ATR"]
+                    entry_price = price  # Sell at bid (no spread adjustment needed)
+                    stop_loss = entry_price + sl_dist
+                    take_profit = entry_price - atr * params["TP_ATR"]
                     position_size = risk_amount / (sl_dist * 100000)
                     position_size = max(0.01, min(position_size, 10.0))
-                    lowest = price
+                    lowest = entry_price
                     bars_in_trade = 0
                     entry_time = current_time
                     
@@ -301,12 +330,12 @@ def run_backtest(
                 
                 if sl_dist > 0:
                     position = "sell"
-                    entry_price = price
-                    stop_loss = price + sl_dist
-                    take_profit = price - atr * params["TP_ATR"]
+                    entry_price = price  # Sell at bid (no spread adjustment needed)
+                    stop_loss = entry_price + sl_dist
+                    take_profit = entry_price - atr * params["TP_ATR"]
                     position_size = risk_amount / (sl_dist * 100000)
                     position_size = max(0.01, min(position_size, 10.0))
-                    lowest = price
+                    lowest = entry_price
                     bars_in_trade = 0
                     entry_time = current_time
         

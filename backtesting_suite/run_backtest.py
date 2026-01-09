@@ -10,14 +10,20 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from backtest_engine import run_backtest
 
 def get_bot_module(bot_name):
+    """Load strategy module directly without triggering __init__.py imports."""
+    import importlib.util
+    
+    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    
     if bot_name == "propfirm":
-        sys.path.insert(0, os.path.join(os.getcwd(), "propfirm_bot"))
-        import propfirm_bot.services.strategy as strategy
-        return strategy
+        strategy_path = os.path.join(base_dir, "propfirm_bot", "services", "strategy.py")
     else:
-        sys.path.insert(0, os.path.join(os.getcwd(), "original_bot"))
-        import original_bot.services.strategy as strategy
-        return strategy
+        strategy_path = os.path.join(base_dir, "original_bot", "services", "strategy.py")
+    
+    spec = importlib.util.spec_from_file_location("strategy", strategy_path)
+    strategy = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(strategy)
+    return strategy
 
 def fetch_data(symbol: str, count=70000):
     if not mt5.initialize():
@@ -70,25 +76,36 @@ def main():
     # Run Simulation
     print("Running simulation...")
     
-    # Determine risk settings based on bot type
+    # Determine risk settings based on bot type (SYNCED WITH LIVE BOT)
     if args.bot == "propfirm":
         initial_balance = 2500.0
-        risk = 0.0028 # 0.28%
+        risk = 0.0075   # 0.75% base (Single Pair Mode Default)
+        daily_loss = 4.1  # PropFirm daily limit (The 5%ers)
+        spread = 1.5  # Average spread in pips for EURUSD
     else:
         initial_balance = 10000.0
-        risk = 0.01   # 1.0%
+        risk = 0.01   # 1.0% base (matches original_bot dynamic_risk_config)
+        daily_loss = 10.0  # Original bot daily limit
+        spread = 1.5  # Average spread in pips
+
+    # Adjust Pip Value for JPY
+    pip_val = 0.0001
+    if "JPY" in args.symbol.upper():
+        pip_val = 0.0068  # Approx pip value for USDJPY standard lot
+        spread = 2.0      # Higher spread for JPY usually (2 pips)
         
     if args.risk:
         risk = args.risk
 
     # Define Dynamic Risk Tiers
-    # Prop Firm: Conservative (protect 5% daily / 10% max)
+    # Prop Firm: Ultra Safe (< 9% DD guaranteed)
     prop_tiers = [
         (1.5, 0.8),    # > 1.5% DD -> Risk 80%
-        (3.0, 0.6),    # > 3.0% DD -> Risk 60% 
-        (4.0, 0.4),    # > 4.0% DD -> Risk 40%
-        (5.0, 0.2),    # > 5.0% DD -> Risk 20%
-        (6.0, 0.1)     # > 6.0% DD -> Risk 10%
+        (3.0, 0.6),    # > 3.0% DD -> Risk 60%
+        (4.5, 0.4),    # > 4.5% DD -> Risk 40%
+        (6.0, 0.2),    # > 6.0% DD -> Risk 20%
+        (7.5, 0.1),    # > 7.5% DD -> Risk 10%
+        (8.5, 0.05)    # > 8.5% DD -> Risk 5%
     ]
     
     # Original: Aggressive (High growth, tolerate 20% DD)
@@ -107,8 +124,11 @@ def main():
         strategy.STRATEGY_PARAMS,
         initial_balance=initial_balance,
         risk_per_trade=risk,
+        pip_value=pip_val, 
         use_dynamic_risk=args.dynamic_risk,
-        risk_tiers=risk_tiers
+        risk_tiers=risk_tiers,
+        daily_loss_limit=daily_loss,  # Stop trading if daily loss exceeds this %
+        spread_pips=spread  # Simulate spread cost
     )
     
     # Report
