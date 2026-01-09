@@ -62,7 +62,7 @@ class Settings:
     
     SYMBOL: str = os.getenv('SYMBOL', 'EURUSDm')  # Legacy: Default single symbol
     TIMEFRAME: str = os.getenv('TIMEFRAME', 'M30')
-    RISK_PERCENT: float = float(os.getenv('RISK_PERCENT', '1.5'))  # Optimized: max safe risk
+    RISK_PERCENT: float = float(os.getenv('RISK_PERCENT', '1.0'))  # Optimized: Aggressive Growth
     
     # Weekend Safety: Close all trades on Friday to avoid gap risk
     CLOSE_ON_FRIDAY: bool = os.getenv('CLOSE_ON_FRIDAY', 'true').lower() == 'true'

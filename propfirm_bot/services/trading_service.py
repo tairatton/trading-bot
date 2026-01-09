@@ -67,7 +67,7 @@ class TradingService:
         # ========== DYNAMIC RISK (5-Tier Anti-Martingale) ==========
         self.peak_balance: float = 0  # Track peak for DD calculation
         self.dynamic_risk_config = {
-            "BASE_RISK": 0.28,  # 0.28% base (optimized for <9% DD)
+            "BASE_RISK": 1.0,  # 1.0% base (Optimized: Safe via Dynamic Risk)
             "TIERS": [
                 (1.5, 0.8),    # > 1.5% DD -> 0.224%
                 (3.0, 0.6),    # > 3.0% DD -> 0.168%
@@ -676,16 +676,7 @@ class TradingService:
             # ---------------------------------------------------------
             # DASHBOARD PERIODIC UPDATE (Every 1 Hour)
             # ---------------------------------------------------------
-            # ---------------------------------------------------------
-            # DASHBOARD PERIODIC UPDATE (Disabled by user)
-            # ---------------------------------------------------------
-            # if (datetime.now() - last_dashboard_time).total_seconds() > 3600:
-            #     try:
-            #         metrics = self.get_dashboard_metrics(mt5_service)
-            #         telegram_service.notify_dashboard(metrics)
-            #         last_dashboard_time = datetime.now()
-            #     except Exception as e:
-            #         logger.error(f"[DASHBOARD] Error sending update: {e}")
+
             
             try:
                 # Ensure MT5 connection is alive (auto reconnect if needed)

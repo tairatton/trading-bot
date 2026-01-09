@@ -67,13 +67,13 @@ class TradingService:
         # ========== DYNAMIC RISK (5-Tier Anti-Martingale) ==========
         self.peak_balance: float = 0  # Track peak for DD calculation
         self.dynamic_risk_config = {
-            "BASE_RISK": 0.50,  # 0.50% base
+            "BASE_RISK": 1.0,  # 1.0% base (Aggressive Growth)
             "TIERS": [
-                (3.0,  0.8),   # > 3%  DD -> 0.40%
-                (6.0,  0.6),   # > 6%  DD -> 0.30%
-                (9.0,  0.4),   # > 9%  DD -> 0.20%
-                (12.0, 0.2),   # > 12% DD -> 0.10%
-                (15.0, 0.1)    # > 15% DD -> 0.05%
+                (5.0,  0.8),   # > 5%  DD -> 0.8%
+                (10.0, 0.6),   # > 10% DD -> 0.6%
+                (15.0, 0.4),   # > 15% DD -> 0.4%
+                (18.0, 0.2),   # > 18% DD -> 0.2%
+                (20.0, 0.1)    # > 20% DD -> 0.1%
             ]
         }
         
