@@ -607,7 +607,13 @@
                     todayEl.className = 'stat-value ' + (todayPnl > 0 ? 'positive' : todayPnl < 0 ? 'negative' : '');
                 }
 
-
+                // Update Dynamic Risk Display
+                if (status.current_risk !== undefined) {
+                    const riskInput = document.getElementById('riskPercent');
+                    if (riskInput) {
+                        riskInput.value = status.current_risk.toFixed(3) + '% (Auto)';
+                    }
+                }
 
                 // Reset error count on success
                 networkErrorCount = 0;

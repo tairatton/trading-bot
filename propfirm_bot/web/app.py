@@ -186,6 +186,9 @@ async def get_status():
         for deal in deals:
             today_pnl += deal.get("profit", 0)
 
+    # Calculate Current Risk
+    current_risk = trading_service.calculate_dynamic_risk(mt5_info.get("balance", 0))
+
     return {
         "bot_status": "running" if status["running"] else "paused" if status["paused"] else "stopped",
         "account": {
@@ -198,7 +201,8 @@ async def get_status():
         "stats": status["stats"],
         "trade_history": status["trade_history"],
         "account_count": 1 if mt5_service.connected else 0,
-        "today_pnl": today_pnl
+        "today_pnl": today_pnl,
+        "current_risk": current_risk
     }
 
 
