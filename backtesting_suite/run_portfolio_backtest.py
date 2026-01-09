@@ -53,7 +53,8 @@ def run_portfolio_backtest(
     use_dynamic_risk: bool = True,
     risk_tiers: list = None,
     daily_loss_limit: float = 4.1,
-    spread_pips: float = 1.5
+    spread_pips: float = 1.5,
+    output_dir: str = "backtest_results"
 ):
     """
     Run portfolio backtest with multiple pairs on SAME balance.
@@ -81,6 +82,10 @@ def run_portfolio_backtest(
     # Start after warmup
     start_idx = 250
     
+    
+    # OUTPUT DIRECTORY
+    os.makedirs(output_dir, exist_ok=True)
+    
     for i, current_time in enumerate(all_times[start_idx:], start=start_idx):
         # Daily reset
         bar_day = current_time.date() if hasattr(current_time, 'date') else current_time
@@ -89,15 +94,40 @@ def run_portfolio_backtest(
             daily_start_balance = balance
         
         # Check daily loss
-        daily_loss_pct = ((daily_start_balance - balance) / daily_start_balance * 100) if daily_start_balance > 0 else 0
+        unrealized_pnl = 0.0
+        
+        # Calculate floating PnL for Equity
+        for symbol, pos in positions.items():
+            if pos["position"] is not None:
+                # Get current price
+                df = pairs_data[symbol]
+                if current_time in df.index:
+                    curr_price = df.loc[current_time, "Close"]
+                    
+                    if pos["position"] == "buy":
+                        floating = (curr_price - pos["entry_price"]) * pos["position_size"] * 100000
+                    else:
+                        floating = (pos["entry_price"] - curr_price) * pos["position_size"] * 100000
+                    
+                    unrealized_pnl += floating
+        
+        equity = balance + unrealized_pnl
+        equity_curve.append({
+            "time": current_time, 
+            "balance": balance, 
+            "equity": equity
+        })
+        
+        # Daily Loss Calculation (Equity based)
+        daily_loss_pct = ((daily_start_balance - equity) / daily_start_balance * 100) if daily_start_balance > 0 else 0
         if daily_loss_pct > max_daily_dd_pct:
             max_daily_dd_pct = daily_loss_pct
         daily_blocked = daily_loss_pct >= daily_loss_limit
         
         # Update peak and DD
-        if balance > peak_balance:
-            peak_balance = balance
-        dd = (peak_balance - balance) / peak_balance * 100 if peak_balance > 0 else 0
+        if equity > peak_balance:
+            peak_balance = equity
+        dd = (peak_balance - equity) / peak_balance * 100 if peak_balance > 0 else 0
         max_drawdown = max(max_drawdown, dd)
         
         # Process each symbol
@@ -127,8 +157,12 @@ def run_portfolio_backtest(
                 exit_reason = ""
                 params = strategy_params.get(pos["signal_type"], {})
                 
+                # Update Highest/Lowest for MAE/MFE
                 if pos["position"] == "buy":
                     pos["highest"] = max(pos.get("highest", price), high)
+                    pos["lowest"] = min(pos.get("lowest", price), low) # Track lowest for MAE
+                    
+                    # Trailing Stop
                     if pos["highest"] - pos["entry_price"] > params.get("TRAIL_START", 1.0) * atr:
                         new_sl = pos["highest"] - params.get("TRAIL_DIST", 0.6) * atr
                         pos["stop_loss"] = max(pos["stop_loss"], new_sl)
@@ -142,8 +176,12 @@ def run_portfolio_backtest(
                     elif pos["bars_in_trade"] >= params.get("MAX_BARS", 50):
                         exit_price = price
                         exit_reason = "TIME"
+                        
                 else:  # sell
                     pos["lowest"] = min(pos.get("lowest", price), low)
+                    pos["highest"] = max(pos.get("highest", price), high) # Track highest for MAE
+                    
+                    # Trailing Stop
                     if pos["entry_price"] - pos["lowest"] > params.get("TRAIL_START", 1.0) * atr:
                         new_sl = pos["lowest"] + params.get("TRAIL_DIST", 0.6) * atr
                         pos["stop_loss"] = min(pos["stop_loss"], new_sl)
@@ -159,19 +197,43 @@ def run_portfolio_backtest(
                         exit_reason = "TIME"
                 
                 if exit_price is not None:
+                    # Calculate MFE/MAE
+                    mae = 0.0
+                    mfe = 0.0
                     if pos["position"] == "buy":
                         pnl = (exit_price - pos["entry_price"]) * pos["position_size"] * 100000
+                        # MAE: Max loss potential (Entry - Lowest)
+                        mae = (pos["entry_price"] - pos["lowest"]) * pos["position_size"] * 100000
+                        # MFE: Max profit potential (Highest - Entry)
+                        mfe = (pos["highest"] - pos["entry_price"]) * pos["position_size"] * 100000
+                        mae = min(mae, 0) # MAE is usually negative or zero relative to entry? No, usually positive distance. 
+                        # Let's align with common definition: MAE is max adverse excursion (distance).
+                        # But user wants scatter plot. Let's keep PnL units for easier plotting.
+                        # Revise: MAE as negative PnL value, MFE as positive PnL value.
+                        mae = (pos["lowest"] - pos["entry_price"]) * pos["position_size"] * 100000
+                        mfe = (pos["highest"] - pos["entry_price"]) * pos["position_size"] * 100000
                     else:
                         pnl = (pos["entry_price"] - exit_price) * pos["position_size"] * 100000
+                        # MAE: Max loss (Highest - Entry)
+                        mae = (pos["entry_price"] - pos["highest"]) * pos["position_size"] * 100000
+                        # MFE: Max profit (Entry - Lowest)
+                        mfe = (pos["entry_price"] - pos["lowest"]) * pos["position_size"] * 100000
                     
                     balance += pnl
                     all_trades.append({
+                        "ticket": len(all_trades) + 1,
                         "symbol": symbol,
                         "type": pos["position"],
-                        "entry": pos["entry_price"],
-                        "exit": exit_price,
+                        "entry_time": current_time, # Approximation (exit time is current)
+                        "exit_time": current_time,
+                        "entry_price": pos["entry_price"],
+                        "exit_price": exit_price,
+                        "lots": pos["position_size"],
                         "pnl": pnl,
-                        "reason": exit_reason
+                        "mae": mae,
+                        "mfe": mfe,
+                        "reason": exit_reason,
+                        "duration_bars": pos["bars_in_trade"]
                     })
                     pos["position"] = None
             
@@ -210,16 +272,17 @@ def run_portfolio_backtest(
                             pos["stop_loss"] = pos["entry_price"] - sl_dist
                             pos["take_profit"] = pos["entry_price"] + atr * params["TP_ATR"]
                             pos["highest"] = pos["entry_price"]
+                            pos["lowest"] = pos["entry_price"]
                         else:
                             pos["entry_price"] = price
                             pos["stop_loss"] = pos["entry_price"] + sl_dist
                             pos["take_profit"] = pos["entry_price"] - atr * params["TP_ATR"]
                             pos["lowest"] = pos["entry_price"]
+                            pos["highest"] = pos["entry_price"]
                         
                         pos["position_size"] = risk_amount / (sl_dist * 100000)
                         pos["position_size"] = max(0.01, min(pos["position_size"], 10.0))
         
-        equity_curve.append({"time": current_time, "balance": balance})
     
     # Calculate stats
     total_trades = len(all_trades)
@@ -230,6 +293,12 @@ def run_portfolio_backtest(
     gross_profit = sum([t["pnl"] for t in all_trades if t["pnl"] > 0])
     gross_loss = abs(sum([t["pnl"] for t in all_trades if t["pnl"] < 0]))
     profit_factor = (gross_profit / gross_loss) if gross_loss > 0 else 999
+    
+    # Export CSVs
+    pd.DataFrame(all_trades).to_csv(os.path.join(output_dir, "trades.csv"), index=False)
+    pd.DataFrame(equity_curve).to_csv(os.path.join(output_dir, "equity.csv"), index=False)
+    
+    print(f"Results saved to {output_dir}")
     
     return {
         "final_balance": balance,
@@ -247,6 +316,7 @@ def main():
     parser.add_argument("--pairs", nargs="+", default=["EURUSDm", "GBPUSDm", "AUDUSDm", "USDCADm", "NZDUSDm"])
     parser.add_argument("--days", type=int, default=1000)
     parser.add_argument("--risk", type=float, default=0.0015)  # 0.15% per pair
+    parser.add_argument("--output", type=str, default="backtest_results")
     args = parser.parse_args()
     
     print("=" * 60)
@@ -254,6 +324,7 @@ def main():
     print("=" * 60)
     print(f"Pairs: {', '.join(args.pairs)}")
     print(f"Risk per pair: {args.risk * 100:.2f}%")
+    print(f"Output Directory: {args.output}")
     print()
     
     # Load strategy
@@ -308,8 +379,9 @@ def main():
         risk_per_trade=args.risk,
         use_dynamic_risk=True,
         risk_tiers=risk_tiers,
-        daily_loss_limit=4.1,
-        spread_pips=1.5
+        daily_loss_limit=daily_loss,
+        spread_pips=1.5,
+        output_dir=args.output
     )
     
     # Report
