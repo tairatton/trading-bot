@@ -406,15 +406,62 @@
             <div class="card">
                 <h2>⚙️ Settings</h2>
                 <form class="settings-form" onsubmit="updateSettings(event)">
-                    <div style="margin-bottom: 12px;">
-                        <label
-                            style="color: var(--text-secondary); font-size: 12px; margin-bottom: 4px; display: flex; justify-content: space-between;">
-                            Risk (%)
-                            <span
-                                style="background: rgba(0,212,255,0.15); color: var(--accent); padding: 2px 6px; border-radius: 4px; font-size: 10px;">DYNAMIC</span>
-                        </label>
-                        <input type="text" id="riskPercent" value="Dynamic (Auto)" readonly
-                            style="width: 100%; padding: 8px; background: rgba(0,0,0,0.3); color: var(--text-secondary); border: 1px solid rgba(255,255,255,0.1); border-radius: 6px; font-size: 13px; cursor: not-allowed;">
+                    <style>
+                        .risk-display-bar {
+                            background: linear-gradient(90deg, #102a43 0%, #0f0f1a 100%);
+                            border-left: 4px solid var(--accent);
+                            border-radius: 6px;
+                            padding: 15px;
+                            display: flex;
+                            justify-content: space-between;
+                            align-items: center;
+                            margin-top: 5px;
+                            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+                            border: 1px solid rgba(255, 255, 255, 0.05);
+                        }
+
+                        .risk-label-group {
+                            display: flex;
+                            flex-direction: column;
+                        }
+
+                        .risk-title {
+                            font-size: 11px;
+                            color: var(--text-secondary);
+                            text-transform: uppercase;
+                            letter-spacing: 1px;
+                            margin-bottom: 2px;
+                        }
+
+                        .risk-value {
+                            font-family: 'Roboto Mono', monospace;
+                            font-size: 20px;
+                            font-weight: 700;
+                            color: var(--accent);
+                            text-shadow: 0 0 15px rgba(0, 212, 255, 0.4);
+                        }
+
+                        .risk-tag {
+                            background: var(--accent);
+                            color: #000;
+                            padding: 4px 8px;
+                            border-radius: 4px;
+                            font-size: 10px;
+                            font-weight: 700;
+                            text-transform: uppercase;
+                        }
+                    </style>
+
+                    <div style="margin-bottom: 15px;">
+                        <div class="risk-display-bar">
+                            <div class="risk-label-group">
+                                <span class="risk-title">Dynamic Risk</span>
+                                <span class="risk-value" id="riskValueDisplay">--%</span>
+                            </div>
+                            <span class="risk-tag">AUTO</span>
+                        </div>
+                        <!-- Hidden input for form submission compatibility -->
+                        <input type="hidden" id="riskPercent" value="0.0">
                     </div>
 
                     <div
@@ -611,9 +658,14 @@
 
                 // Update Dynamic Risk Display
                 if (status.current_risk !== undefined) {
+                    const riskValEl = document.getElementById('riskValueDisplay');
                     const riskInput = document.getElementById('riskPercent');
+
+                    if (riskValEl) {
+                        riskValEl.textContent = status.current_risk.toFixed(3) + '%';
+                    }
                     if (riskInput) {
-                        riskInput.value = status.current_risk.toFixed(3) + '% (Auto)';
+                        riskInput.value = status.current_risk;
                     }
                 }
 
