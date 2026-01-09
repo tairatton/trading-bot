@@ -500,9 +500,20 @@ class TradingService:
     
     def run_loop(self, mt5_service, data_service):
         """Main trading loop."""
-        logger.info("========== TRADING BOT STARTED ==========")
-        logger.info(f"Active trading symbols: {settings.ACTIVE_SYMBOLS}")
-        logger.info(f"Scanning all symbols: {settings.AVAILABLE_SYMBOLS}")
+        logger.info("=" * 60)
+        logger.info("           TRADING BOT STARTED (Original)")
+        logger.info("=" * 60)
+        logger.info(f"Mode:           3-Pair Portfolio (Aggressive Tiers)")
+        logger.info(f"Base Risk:      {self.dynamic_risk_config['BASE_RISK']:.2f}% per pair")
+        logger.info(f"Recommended:    EURUSD, USDCAD, USDCHF")
+        logger.info(f"Active Symbols: {settings.ACTIVE_SYMBOLS}")
+        logger.info(f"DD Limit:       {self.DAILY_LOSS_LIMIT}% Daily, 20% Max Total")
+        logger.info("-" * 60)
+        logger.info("Dynamic Risk Tiers:")
+        for threshold, mult in self.dynamic_risk_config["TIERS"]:
+            effective = self.dynamic_risk_config["BASE_RISK"] * mult
+            logger.info(f"  DD > {threshold}% -> Risk {effective:.2f}%")
+        logger.info("=" * 60)
         
         # Track last signal per symbol to avoid duplicate alerts
         last_signals = {}
@@ -661,10 +672,17 @@ class TradingService:
         )
         self.thread.start()
         
-        # Send Telegram notification
+        # Send Telegram notification with Risk Config
         symbols_str = ', '.join(settings.ACTIVE_SYMBOLS)
+        base_risk = self.dynamic_risk_config["BASE_RISK"]
         print(f"[TELEGRAM] Sending Bot Started notification...")
-        telegram_service.notify_bot_started(symbols_str, str(settings.MT5_LOGIN))
+        telegram_service.notify_bot_started(
+            symbols_str, 
+            str(settings.MT5_LOGIN),
+            base_risk=base_risk,
+            risk_mode="Aggressive",
+            recommended_pairs="EURUSD, USDCAD, USDCHF"
+        )
         
         return {"success": True, "message": "Bot started"}
     

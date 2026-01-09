@@ -663,9 +663,20 @@ class TradingService:
     
     def run_loop(self, mt5_service, data_service):
         """Main trading loop."""
-        logger.info("========== TRADING BOT STARTED ==========")
-        logger.info(f"Active trading symbols: {settings.ACTIVE_SYMBOLS}")
-        logger.info(f"Scanning all symbols: {settings.AVAILABLE_SYMBOLS}")
+        logger.info("=" * 60)
+        logger.info("           TRADING BOT STARTED (PropFirm)")
+        logger.info("=" * 60)
+        logger.info(f"Mode:           3-Pair Portfolio (Safe Tiers)")
+        logger.info(f"Base Risk:      {self.dynamic_risk_config['BASE_RISK']:.2f}% per pair")
+        logger.info(f"Recommended:    EURUSD, USDCAD, USDCHF")
+        logger.info(f"Active Symbols: {settings.ACTIVE_SYMBOLS}")
+        logger.info(f"DD Limit:       {self.DAILY_LOSS_LIMIT}% Daily, 9% Max Total")
+        logger.info("-" * 60)
+        logger.info("Dynamic Risk Tiers:")
+        for threshold, mult in self.dynamic_risk_config["TIERS"]:
+            effective = self.dynamic_risk_config["BASE_RISK"] * mult
+            logger.info(f"  DD > {threshold}% -> Risk {effective:.2f}%")
+        logger.info("=" * 60)
         
         # Track last signal per symbol to avoid duplicate alerts
         last_signals = {}
