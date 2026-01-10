@@ -1,13 +1,13 @@
 """
-Multi-Pair Portfolio Backtest
-Run multiple pairs on the SAME account balance to get realistic portfolio performance.
+Prop Firm Bot Backtest (Dedicated)
+- Defaults: 3 Pairs, Risk 0.25%, Safe Tiers
+- Output: backtest_results_propfirm
 """
 import argparse
 import sys
 import os
 import pandas as pd
 import MetaTrader5 as mt5
-import importlib.util
 import importlib.util
 from datetime import datetime
 import matplotlib.pyplot as plt
@@ -56,12 +56,12 @@ def run_portfolio_backtest(
     pairs_data: dict,  # {symbol: df}
     strategy_params: dict,
     initial_balance: float = 2500.0,
-    risk_per_trade: float = 0.0015,  # 0.15% per pair
+    risk_per_trade: float = 0.0025,
     use_dynamic_risk: bool = True,
     risk_tiers: list = None,
     daily_loss_limit: float = 4.1,
     spread_pips: float = 1.5,
-    output_dir: str = "backtest_results"
+    output_dir: str = "backtest_results_propfirm"
 ):
     """
     Run portfolio backtest with multiple pairs on SAME balance.
@@ -213,10 +213,7 @@ def run_portfolio_backtest(
                         mae = (pos["entry_price"] - pos["lowest"]) * pos["position_size"] * 100000
                         # MFE: Max profit potential (Highest - Entry)
                         mfe = (pos["highest"] - pos["entry_price"]) * pos["position_size"] * 100000
-                        mae = min(mae, 0) # MAE is usually negative or zero relative to entry? No, usually positive distance. 
-                        # Let's align with common definition: MAE is max adverse excursion (distance).
-                        # But user wants scatter plot. Let's keep PnL units for easier plotting.
-                        # Revise: MAE as negative PnL value, MFE as positive PnL value.
+                        mae = min(mae, 0) 
                         mae = (pos["lowest"] - pos["entry_price"]) * pos["position_size"] * 100000
                         mfe = (pos["highest"] - pos["entry_price"]) * pos["position_size"] * 100000
                     else:
@@ -320,27 +317,24 @@ def run_portfolio_backtest(
 
 def main():
     parser = argparse.ArgumentParser()
-    # Updated defaults to match "Golden Setup" (Prop Firm 3 Pairs)
+    # Prop Firm Defaults (0.25% Risk)
     parser.add_argument("--pairs", nargs="+", default=["EURUSDm", "USDCADm", "USDCHFm"])
     parser.add_argument("--days", type=int, default=365)
-    parser.add_argument("--risk", type=float, default=0.0025)  # 0.25% per pair (Optimized: High Return + Safe Daily DD)
-    parser.add_argument("--output", type=str, default="backtest_results")
+    parser.add_argument("--risk", type=float, default=0.0025)
+    parser.add_argument("--output", type=str, default="backtest_results_propfirm")
     args = parser.parse_args()
     
     print("=" * 60)
-    print("PORTFOLIO BACKTEST: 5 PAIRS (SHARED BALANCE)")
+    print("PROP FIRM BOT BACKTEST (Safe Mode)")
     print("=" * 60)
     print(f"Pairs: {', '.join(args.pairs)}")
     print(f"Risk per pair: {args.risk * 100:.2f}%")
-    print(f"Output Directory: {args.output}")
     print()
     
-    # Load strategy
     strategy = get_strategy_module("propfirm")
     
-    # Fetch data for all pairs
     pairs_data = {}
-    bars_count = args.days * 48  # 30min bars
+    bars_count = args.days * 48
     
     for symbol in args.pairs:
         print(f"Fetching {symbol}...")
@@ -351,33 +345,19 @@ def main():
             pairs_data[symbol] = df
             print(f"  -> {len(df)} bars loaded")
     
-    if not pairs_data:
-        print("No data loaded!")
-        return
+    if not pairs_data: return
     
-    print("\nRunning portfolio simulation...")
+    print("\nRunning simulation...")
     
-    # Risk tiers
-    if args.risk >= 0.005: # Assume aggressive/original bot if risk >= 0.5%
-        print("Using ORIGINAL BOT Risk Tiers (Aggressive)")
-        risk_tiers = [
-            (5.0, 0.8),
-            (10.0, 0.6),
-            (15.0, 0.4),
-            (18.0, 0.2),
-            (19.0, 0.1)
-        ]
-        daily_loss = 10.0
-    else:
-        print("Using PROPFIRM BOT Risk Tiers (Safe)")
-        risk_tiers = [
-            (1.5, 0.8),
-            (3.0, 0.6),
-            (4.5, 0.4),
-            (6.0, 0.2),
-            (7.5, 0.1)
-        ]
-        daily_loss = 4.1
+    # Prop Firm 5-Tier Config
+    risk_tiers = [
+        (1.5, 0.8),
+        (3.0, 0.6),
+        (4.5, 0.4),
+        (6.0, 0.2),
+        (7.5, 0.1)
+    ]
+    daily_loss = 4.1
     
     results = run_portfolio_backtest(
         pairs_data,
@@ -387,34 +367,23 @@ def main():
         use_dynamic_risk=True,
         risk_tiers=risk_tiers,
         daily_loss_limit=daily_loss,
-        spread_pips=1.5,
         output_dir=args.output
     )
     
     # Report
     print("\n" + "=" * 60)
-    print("PORTFOLIO RESULTS (5 PAIRS)")
+    print("PROP FIRM RESULTS")
     print("=" * 60)
-    print(f"Final Balance:   ${results['final_balance']:,.2f}")
     print(f"Total Return:    {results['total_return']:.2f}%")
     print(f"Max Drawdown:    {results['max_drawdown']:.2f}%")
     print(f"Max Daily DD:    {results['max_daily_drawdown']:.2f}%")
-    print(f"Total Trades:    {results['total_trades']}")
-    print(f"Win Rate:        {results['win_rate']:.1f}%")
-    print(f"Profit Factor:   {results['profit_factor']:.2f}")
-    print()
-    print("Trades by Symbol:")
-    for symbol, count in results['trades_by_symbol'].items():
-        print(f"  {symbol}: {count} trades")
     print("=" * 60)
 
     # Generate Charts automatically
-    print("\nGenerating charts...")
     try:
         generate_report(args.output)
-        print("Charts generated successfully!")
-    except Exception as e:
-        print(f"Error generating charts: {e}")
+        print("Charts generated!")
+    except: pass
 
 def generate_report(results_dir):
     """Generate financial charts from results."""
