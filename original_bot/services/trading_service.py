@@ -86,7 +86,7 @@ class TradingService:
         self.last_daily_reset: Optional[datetime] = None
         
         # Persistence file for daily state (survives restarts)
-        self.DAILY_STATE_FILE: str = os.path.join(log_dir, "daily_state.json")
+        self.DAILY_STATE_FILE: str = os.path.join(log_dir, f"daily_state_{settings.MT5_LOGIN}.json")
         try:
             self._load_daily_state()
         except Exception:
@@ -199,6 +199,14 @@ class TradingService:
                 with open(self.DAILY_STATE_FILE, 'r') as f:
                     state = json.load(f)
                     
+                    # Validate Account ID (prevent collision)
+                    saved_account = state.get("account_id")
+                    current_account = str(settings.MT5_LOGIN)
+                    
+                    if saved_account and str(saved_account) != current_account:
+                        logger.warning(f"[STATE] Account mismatch! File: {saved_account}, Current: {current_account}. Resetting state.")
+                        return  # Ignore file, start fresh
+                    
                     # Load Daily Loss Stats
                     self.daily_starting_balance = state.get("daily_starting_balance", 0)
                     last_reset_str = state.get("last_daily_reset")
@@ -218,6 +226,7 @@ class TradingService:
         """Save daily state to JSON file."""
         try:
             state = {
+                "account_id": str(settings.MT5_LOGIN),
                 "daily_starting_balance": self.daily_starting_balance,
                 "last_daily_reset": self.last_daily_reset.isoformat() if self.last_daily_reset else None,
                 "peak_balance": self.peak_balance,

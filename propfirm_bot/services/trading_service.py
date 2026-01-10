@@ -89,7 +89,7 @@ class TradingService:
         self.last_daily_reset: Optional[datetime] = None
         
         # Persistence file for daily state (survives restarts)
-        self.DAILY_STATE_FILE: str = os.path.join(log_dir, "daily_state.json")
+        self.DAILY_STATE_FILE: str = os.path.join(log_dir, f"daily_state_{settings.MT5_LOGIN}.json")
         self._load_daily_state()
         
         # News filter removed - using spread filter instead
@@ -194,6 +194,15 @@ class TradingService:
             if os.path.exists(self.DAILY_STATE_FILE):
                 with open(self.DAILY_STATE_FILE, 'r') as f:
                     state = json.load(f)
+                    
+                    # Validate Account ID (prevent collision)
+                    saved_account = state.get("account_id")
+                    current_account = str(settings.MT5_LOGIN)
+                    
+                    if saved_account and str(saved_account) != current_account:
+                        logger.warning(f"[STATE] Account mismatch! File: {saved_account}, Current: {current_account}. Resetting state.")
+                        return  # Ignore file, start fresh
+                    
                     saved_date = state.get("date", "")
                     today = datetime.utcnow().strftime("%Y-%m-%d")
                     
@@ -217,6 +226,7 @@ class TradingService:
         """Save daily state to JSON file."""
         try:
             state = {
+                "account_id": str(settings.MT5_LOGIN),
                 "date": datetime.utcnow().strftime("%Y-%m-%d"),
                 "starting_balance": self.daily_starting_balance,
                 "reset_time": self.last_daily_reset.isoformat() if self.last_daily_reset else datetime.utcnow().isoformat(),
