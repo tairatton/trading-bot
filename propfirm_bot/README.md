@@ -3,20 +3,20 @@
 ## Purpose
 Safe trading for Prop Firm Challenge (The5ers, FTMO, etc.)
 
-## Configuration
-- **Symbol:** EURUSD only
-- **Risk per Trade:** 0.45%
-- **Expected Monthly:** ~6.7%
-- **Max Drawdown:** ~13.7%
-- **Max Daily Loss:** ~3.2% (< 5% limit)
+## Configuration (Golden Setup 🏆)
+- **Symbols:** EURUSD, USDCAD, USDCHF (3 Pairs)
+- **Risk per Trade:** 0.09% (per pair)
+- **Expected Return:** ~30% per year (Passes Challenge!)
+- **Max Drawdown:** ~3.56% (Very Safe)
+- **Max Daily Loss:** ~1.55% (Far below 5% limit)
 
 ## Prop Firm Limits
 | Limit | Requirement | Our Config |
 |-------|-------------|------------|
-| Daily Loss | 5% | 3.2% ✅ |
-| Max Loss | $1,000 | ~$43 ✅ |
-| Phase 1 Target | 8% | ~6.7%/month |
-| Phase 2 Target | 5% | ~6.7%/month |
+| Daily Loss | 5% | 1.55% ✅ |
+| Max Loss | 10% | 3.56% ✅ |
+| Phase 1 Target | 8% | Passed in ~4 months |
+| **Slippage** | - | **Must use RAW/ECN Account** |
 
 ## Setup
 1. Create account with prop firm (The5ers, etc.)
@@ -24,17 +24,11 @@ Safe trading for Prop Firm Challenge (The5ers, FTMO, etc.)
 3. Install dependencies: `pip install -r requirements.txt`
 4. Run bot: `python main.py`
 
-## Backtest
-```bash
-python backtest/backtest.py
-```
-
-## Output Files
-- `propfirm_backtest_trades.csv` - Trade history
-- `propfirm_equity_curve.csv` - Equity curve
-- `propfirm_daily_pnl.csv` - Daily P&L breakdown
+## Backtest Results (1 Year)
+- **Net Profit:** +30.18%
+- **Profit Factor:** 1.22
+- **Success Rate:** 56.1%
+- **Stagnation:** Max 168 days flat
 
 ## Timeline to Pass Challenge
-- Phase 1 (8%): ~2 months
-- Phase 2 (5%): ~1 month
-- **Total: ~3 months to funded**
+- **Estimate: ~3-5 months to funded** (Safe & Steady)

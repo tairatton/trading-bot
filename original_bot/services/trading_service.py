@@ -69,7 +69,7 @@ class TradingService:
         # Result: +18,637% Return, 10.89% Max DD (6 Years)
         self.peak_balance: float = 0  # Track peak for DD calculation
         self.dynamic_risk_config = {
-            "BASE_RISK": 0.70,  # 0.70% per pair (Total Exposure ~2.1%)
+            "BASE_RISK": settings.RISK_PERCENT,  # Load from .env (Target: 0.70%)
             "TIERS": [
                 (5.0,  0.8),   # > 5%  DD -> 0.56%
                 (10.0, 0.6),   # > 10% DD -> 0.42%

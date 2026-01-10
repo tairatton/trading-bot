@@ -8,7 +8,14 @@ import os
 import pandas as pd
 import MetaTrader5 as mt5
 import importlib.util
+import importlib.util
 from datetime import datetime
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+# Set style
+plt.style.use('ggplot')
+sns.set_theme(style="whitegrid")
 
 # Allow imports from bot dirs
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -313,9 +320,10 @@ def run_portfolio_backtest(
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--pairs", nargs="+", default=["EURUSDm", "GBPUSDm", "AUDUSDm", "USDCADm", "NZDUSDm"])
-    parser.add_argument("--days", type=int, default=1000)
-    parser.add_argument("--risk", type=float, default=0.0015)  # 0.15% per pair
+    # Updated defaults to match "Golden Setup" (Prop Firm 3 Pairs)
+    parser.add_argument("--pairs", nargs="+", default=["EURUSDm", "USDCADm", "USDCHFm"])
+    parser.add_argument("--days", type=int, default=365)
+    parser.add_argument("--risk", type=float, default=0.0025)  # 0.25% per pair (Optimized: High Return + Safe Daily DD)
     parser.add_argument("--output", type=str, default="backtest_results")
     args = parser.parse_args()
     
@@ -367,8 +375,7 @@ def main():
             (3.0, 0.6),
             (4.5, 0.4),
             (6.0, 0.2),
-            (7.5, 0.1),
-            (8.5, 0.05)
+            (7.5, 0.1)
         ]
         daily_loss = 4.1
     
@@ -400,6 +407,100 @@ def main():
     for symbol, count in results['trades_by_symbol'].items():
         print(f"  {symbol}: {count} trades")
     print("=" * 60)
+
+    # Generate Charts automatically
+    print("\nGenerating charts...")
+    try:
+        generate_report(args.output)
+        print("Charts generated successfully!")
+    except Exception as e:
+        print(f"Error generating charts: {e}")
+
+def generate_report(results_dir):
+    """Generate financial charts from results."""
+    trades_path = os.path.join(results_dir, "trades.csv")
+    equity_path = os.path.join(results_dir, "equity.csv")
+    
+    if not os.path.exists(trades_path) or not os.path.exists(equity_path):
+        return
+    
+    trades = pd.read_csv(trades_path)
+    equity = pd.read_csv(equity_path)
+    
+    # Convert dates
+    trades['entry_time'] = pd.to_datetime(trades['entry_time'])
+    trades['exit_time'] = pd.to_datetime(trades['exit_time'])
+    equity['time'] = pd.to_datetime(equity['time'])
+    
+    # 1. Growth
+    plot_growth_analysis(equity, trades, results_dir)
+    # 2. Risk
+    plot_risk_analysis(equity, results_dir)
+    # 3. Efficiency
+    plot_efficiency_analysis(trades, results_dir)
+    # 4. Stats
+    plot_stats_analysis(trades, results_dir)
+
+def plot_growth_analysis(equity, trades, output_dir):
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 10))
+    ax1.plot(equity['time'], equity['balance'], label='Balance', linewidth=1.5, alpha=0.7)
+    ax1.plot(equity['time'], equity['equity'], label='Equity', linewidth=1.0, alpha=0.9)
+    ax1.set_title('Balance vs Equity Curve')
+    ax1.legend()
+    ax1.set_ylabel('Account Value ($)')
+    
+    if not trades.empty:
+        trades['month_year'] = trades['exit_time'].dt.to_period('M')
+        monthly_pnl = trades.groupby('month_year')['pnl'].sum().reset_index()
+        monthly_pnl['year'] = monthly_pnl['month_year'].dt.year
+        monthly_pnl['month'] = monthly_pnl['month_year'].dt.month
+        pivot = monthly_pnl.pivot(index='year', columns='month', values='pnl')
+        sns.heatmap(pivot, annot=True, fmt=".0f", cmap="RdYlGn", center=0, ax=ax2)
+        ax2.set_title('Monthly PnL Heatmap')
+    
+    plt.tight_layout()
+    plt.savefig(os.path.join(output_dir, "1_growth_analysis.png"))
+    plt.close()
+
+def plot_risk_analysis(equity, output_dir):
+    fig, ax1 = plt.subplots(figsize=(12, 6))
+    peak = equity['equity'].cummax()
+    dd_pct = (equity['equity'] - peak) / peak * 100
+    ax1.fill_between(equity['time'], dd_pct, 0, color='red', alpha=0.3)
+    ax1.plot(equity['time'], dd_pct, color='red', linewidth=1)
+    ax1.set_title('Underwater Plot (Drawdown %)')
+    ax1.set_ylabel('Drawdown (%)')
+    plt.tight_layout()
+    plt.savefig(os.path.join(output_dir, "2_risk_analysis.png"))
+    plt.close()
+
+def plot_efficiency_analysis(trades, output_dir):
+    if trades.empty: return
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 6))
+    wins = trades[trades['pnl'] > 0]
+    losses = trades[trades['pnl'] <= 0]
+    ax1.scatter(wins['mae'].abs(), wins['mfe'].abs(), color='green', alpha=0.5, label='Wins')
+    ax1.scatter(losses['mae'].abs(), losses['mfe'].abs(), color='red', alpha=0.5, label='Losses')
+    max_val = max(trades['mae'].abs().max(), trades['mfe'].abs().max())
+    ax1.plot([0, max_val], [0, max_val], 'k--', alpha=0.3)
+    ax1.set_title('MAE vs MFE')
+    ax1.legend()
+    sns.histplot(data=trades, x='duration_bars', bins=30, kde=True, ax=ax2)
+    ax2.set_title('Trade Duration (Bars)')
+    plt.tight_layout()
+    plt.savefig(os.path.join(output_dir, "3_efficiency_analysis.png"))
+    plt.close()
+
+def plot_stats_analysis(trades, output_dir):
+    if trades.empty: return
+    fig, ax1 = plt.subplots(figsize=(10, 6))
+    wins = len(trades[trades['pnl'] > 0])
+    losses = len(trades[trades['pnl'] <= 0])
+    ax1.pie([wins, losses], labels=[f'Wins ({wins})', f'Losses ({losses})'], colors=['#66b3ff', '#ff9999'], autopct='%1.1f%%', startangle=90)
+    ax1.set_title('Win/Loss Ratio')
+    plt.tight_layout()
+    plt.savefig(os.path.join(output_dir, "4_stats_analysis.png"))
+    plt.close()
 
 if __name__ == "__main__":
     main()
