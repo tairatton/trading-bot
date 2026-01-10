@@ -319,7 +319,7 @@ def main():
     parser = argparse.ArgumentParser()
     # Prop Firm Defaults (0.25% Risk)
     parser.add_argument("--pairs", nargs="+", default=["EURUSDm", "USDCADm", "USDCHFm"])
-    parser.add_argument("--days", type=int, default=365)
+    parser.add_argument("--days", type=int, default=1825)
     parser.add_argument("--risk", type=float, default=0.0025)
     parser.add_argument("--output", type=str, default="backtest_results_propfirm")
     args = parser.parse_args()
