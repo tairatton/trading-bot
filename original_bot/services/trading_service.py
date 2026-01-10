@@ -161,6 +161,37 @@ class TradingService:
         self.last_error = None  # Clear after reading
         return error
 
+    def get_dashboard_metrics(self, mt5_service) -> Dict:
+        """Get detailed dashboard metrics including MaxDD and Fees."""
+        # Get metrics
+        account = mt5_service.get_account_info()
+        fees = mt5_service.get_daily_fees()
+        
+        balance = account.get("balance", 0.0)
+        
+        # Calculate current DD stats
+        if self.peak_balance > 0:
+            current_dd_abs = self.peak_balance - balance
+            current_dd_pct = (current_dd_abs / self.peak_balance) * 100
+        else:
+            current_dd_abs = 0.0
+            current_dd_pct = 0.0
+            
+        return {
+            "balance": balance,
+            "equity": account.get("equity", 0.0),
+            "profit": account.get("profit", 0.0),
+            "peak_balance": self.peak_balance,
+            "current_dd_abs": current_dd_abs,
+            "current_dd_pct": current_dd_pct,
+            "max_dd_abs": self.max_dd_abs,
+            "max_dd_pct": self.max_dd_pct,
+            "fees_commission": fees.get("commission", 0.0),
+            "fees_swap": fees.get("swap", 0.0),
+            "fees_total": fees.get("total", 0.0),
+            "current_risk": self.calculate_dynamic_risk(balance)
+        }
+
     def _load_daily_state(self) -> None:
         """Load daily state from JSON file (for restart persistence)."""
         try:

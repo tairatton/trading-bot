@@ -161,6 +161,8 @@ class TelegramService:
         fees_swap = metrics.get('fees_swap', 0)
         fees_total = metrics.get('fees_total', 0)
         
+        current_risk = metrics.get('current_risk', 0)
+        
         profit_emoji = "🟢" if profit >= 0 else "🔴"
         
         msg = f"""
@@ -171,9 +173,10 @@ class TelegramService:
 <b>Equity:</b> ${equity:,.2f}
 <b>Open P/L:</b> {profit_emoji} ${profit:,.2f}
 
-📉 <b>Drawdown Stats</b>
+📉 <b>Drawdown & Risk</b>
 <b>Current DD:</b> ${current_dd_abs:,.2f} ({current_dd_pct:.2f}%)
 <b>Max DD:</b> ${max_dd_abs:,.2f} ({max_dd_pct:.2f}%)
+<b>Current Risk:</b> {current_risk:.3f}%
 
 💸 <b>Fees (Today)</b>
 <b>Commission:</b> ${fees_comm:,.2f}
